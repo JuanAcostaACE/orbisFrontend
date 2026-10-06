@@ -8,9 +8,13 @@
 // ─────────────────────────────────────
 // En desarrollo: Spring Boot corre en localhost:8080.
 // En producción (Railway): reemplaza con tu URL de Railway.
+// INSTRUCCION: Despues de desplegar en Railway, reemplaza la URL de abajo
+// con la URL real de tu servicio Railway (ej: https://orbis-backend.up.railway.app)
+const RAILWAY_URL = 'https://TU-PROYECTO.up.railway.app'; // <-- CAMBIAR ESTO
+
 const API_BASE_URL = window.location.hostname === 'localhost'
-  ? 'http://localhost:8080'
-  : 'REEMPLAZAR_CON_URL_RAILWAY'; // <- Actualiza esto con tu URL de Railway antes de desplegar en Vercel
+  ? 'http://localhost:8080'   // Desarrollo local
+  : RAILWAY_URL;              // Produccion (Vercel -> Railway)
 
 const ENDPOINT_EVENTOS = `${API_BASE_URL}/api/v1/eventos`;
 const INTERVALO_AUTO_REFRESH_MS = 10000; // Refresca cada 10 segundos automáticamente
