@@ -5,7 +5,7 @@
 
 // ─── CONFIGURACION ───────────────────────────────────────────
 // INSTRUCCION: Cuando Railway te de la URL del backend, pegalа aqui:
-const RAILWAY_URL = 'https://TU-PROYECTO.up.railway.app'; // <-- ACTUALIZAR CON URL DE RAILWAY
+const RAILWAY_URL = 'https://orbisbackend-production.up.railway.app'; // <-- ACTUALIZAR CON URL DE RAILWAY
 
 const API_BASE_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:8080'   // Desarrollo local
