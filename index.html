@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="SmartCane AI — Panel de monitoreo para bastón inteligente con IA para personas con discapacidad visual" />
-  <title>SmartCane AI — Panel de Eventos</title>
+  <meta name="description" content="ORBIS — Panel de monitoreo IoT para tecnologia asistiva con IA para personas con discapacidad visual" />
+  <title>ORBIS — Panel de Eventos</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -13,9 +13,9 @@
 <body>
   <header class="header" role="banner">
     <div class="header-inner">
-      <div class="logo" aria-label="SmartCane AI">
+      <div class="logo" aria-label="ORBIS">
         <span class="logo-icon" aria-hidden="true">🦯</span>
-        <span class="logo-text">SmartCane <strong>AI</strong></span>
+        <span class="logo-text"><strong>ORBIS</strong></span>
       </div>
       <div class="status-bar">
         <span id="status-dot" class="status-dot" aria-hidden="true"></span>
@@ -26,15 +26,15 @@
 
   <main class="main" role="main">
     <section class="summary" aria-label="Resumen de actividad">
-      <div class="stat-card" id="stat-total">
+      <div class="stat-card">
         <span class="stat-number" id="count-total">—</span>
         <span class="stat-label">Total eventos</span>
       </div>
-      <div class="stat-card" id="stat-pasivo">
+      <div class="stat-card">
         <span class="stat-number" id="count-pasivo">—</span>
         <span class="stat-label">Modo Pasivo</span>
       </div>
-      <div class="stat-card" id="stat-activo">
+      <div class="stat-card">
         <span class="stat-number" id="count-activo">—</span>
         <span class="stat-label">Modo Activo</span>
       </div>
@@ -44,27 +44,22 @@
       <div class="section-header">
         <h1>Eventos registrados</h1>
         <button id="btn-refresh" class="btn-refresh" aria-label="Actualizar lista de eventos">
-          ↻ Actualizar
+          Actualizar
         </button>
       </div>
-
       <div id="error-banner" class="error-banner hidden" role="alert" aria-live="polite"></div>
-
       <div id="loading" class="loading" aria-live="polite" aria-busy="true">
         <div class="spinner" aria-hidden="true"></div>
         <span>Cargando eventos...</span>
       </div>
-
-      <ul id="eventos-list" class="eventos-list" role="list" aria-label="Eventos del SmartCane"></ul>
-
+      <ul id="eventos-list" class="eventos-list" role="list" aria-label="Eventos de ORBIS"></ul>
       <div id="empty-state" class="empty-state hidden" aria-live="polite">
         <span aria-hidden="true">📡</span>
-        <p>Aún no hay eventos. El bastón enviará datos cuando detecte obstáculos.</p>
+        <p>Aun no hay eventos. El baston enviara datos cuando detecte obstaculos.</p>
       </div>
     </section>
   </main>
 
-  <!-- Template de tarjeta de evento (clonado por JS) -->
   <template id="evento-template">
     <li class="evento-card" role="listitem">
       <div class="evento-header">
@@ -74,10 +69,10 @@
       <div class="evento-body">
         <div class="evento-distancia">
           <span class="evento-label">Distancia</span>
-          <span class="evento-valor distancia-valor" aria-label="Distancia en centímetros"></span>
+          <span class="evento-valor distancia-valor"></span>
         </div>
         <div class="evento-ia hidden">
-          <span class="evento-label">Análisis IA</span>
+          <span class="evento-label">Analisis IA</span>
           <span class="evento-valor ia-valor"></span>
           <button class="btn-escuchar" aria-label="Escuchar resultado en voz alta">
             🔊 Escuchar

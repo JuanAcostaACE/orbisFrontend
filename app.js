@@ -1,235 +1,145 @@
 /* ══════════════════════════════════════
-   SmartCane AI — app.js
-   Consume el backend y usa Web Speech API
+   ORBIS — app.js
+   Consume el backend Railway y usa Web Speech API
    ══════════════════════════════════════ */
 
-// ─────────────────────────────────────
-//  CONFIGURACIÓN
-// ─────────────────────────────────────
-// En desarrollo: Spring Boot corre en localhost:8080.
-// En producción (Railway): reemplaza con tu URL de Railway.
-// INSTRUCCION: Despues de desplegar en Railway, reemplaza la URL de abajo
-// con la URL real de tu servicio Railway (ej: https://orbis-backend.up.railway.app)
-const RAILWAY_URL = 'https://TU-PROYECTO.up.railway.app'; // <-- CAMBIAR ESTO
+// ─── CONFIGURACION ───────────────────────────────────────────
+// INSTRUCCION: Cuando Railway te de la URL del backend, pegalа aqui:
+const RAILWAY_URL = 'https://TU-PROYECTO.up.railway.app'; // <-- ACTUALIZAR CON URL DE RAILWAY
 
 const API_BASE_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:8080'   // Desarrollo local
   : RAILWAY_URL;              // Produccion (Vercel -> Railway)
 
 const ENDPOINT_EVENTOS = `${API_BASE_URL}/api/v1/eventos`;
-const INTERVALO_AUTO_REFRESH_MS = 10000; // Refresca cada 10 segundos automáticamente
+const INTERVALO_AUTO_REFRESH_MS = 10000;
 
-// ─────────────────────────────────────
-//  REFERENCIAS AL DOM
-// ─────────────────────────────────────
-const statusDot     = document.getElementById('status-dot');
-const statusText    = document.getElementById('status-text');
-const errorBanner   = document.getElementById('error-banner');
-const loading       = document.getElementById('loading');
-const eventosList   = document.getElementById('eventos-list');
-const emptyState    = document.getElementById('empty-state');
-const btnRefresh    = document.getElementById('btn-refresh');
-const countTotal    = document.getElementById('count-total');
-const countPasivo   = document.getElementById('count-pasivo');
-const countActivo   = document.getElementById('count-activo');
-const template      = document.getElementById('evento-template');
+// ─── DOM ─────────────────────────────────────────────────────
+const statusDot   = document.getElementById('status-dot');
+const statusText  = document.getElementById('status-text');
+const errorBanner = document.getElementById('error-banner');
+const loading     = document.getElementById('loading');
+const eventosList = document.getElementById('eventos-list');
+const emptyState  = document.getElementById('empty-state');
+const btnRefresh  = document.getElementById('btn-refresh');
+const countTotal  = document.getElementById('count-total');
+const countPasivo = document.getElementById('count-pasivo');
+const countActivo = document.getElementById('count-activo');
+const template    = document.getElementById('evento-template');
 
-// ─────────────────────────────────────
-//  ESTADO
-// ─────────────────────────────────────
-let eventosCache = [];
+// ─── ESTADO ──────────────────────────────────────────────────
 let synth = window.speechSynthesis || null;
 
-// ─────────────────────────────────────
-//  INICIO
-// ─────────────────────────────────────
+// ─── INICIO ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   cargarEventos();
   btnRefresh.addEventListener('click', cargarEventos);
   setInterval(cargarEventos, INTERVALO_AUTO_REFRESH_MS);
 });
 
-// ─────────────────────────────────────
-//  FETCH DE EVENTOS
-// ─────────────────────────────────────
+// ─── FETCH ───────────────────────────────────────────────────
 async function cargarEventos() {
   mostrarCargando(true);
   ocultarError();
-
   try {
     const response = await fetch(ENDPOINT_EVENTOS, {
       method: 'GET',
       headers: { 'Accept': 'application/json' }
     });
-
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ mensaje: 'Error desconocido' }));
-      throw new Error(`${response.status}: ${errorData.mensaje || response.statusText}`);
+      const err = await response.json().catch(() => ({ mensaje: 'Error desconocido' }));
+      throw new Error(`${response.status}: ${err.mensaje || response.statusText}`);
     }
-
-    eventosCache = await response.json();
-    renderizarEventos(eventosCache);
+    const eventos = await response.json();
+    renderizarEventos(eventos);
     actualizarEstadoConexion(true);
-
   } catch (error) {
-    console.error('[SmartCane] Error al cargar eventos:', error);
-    mostrarError(`No se pudo conectar con el backend: ${error.message}`);
+    console.error('[ORBIS] Error:', error);
+    mostrarError(`Sin conexion con el backend: ${error.message}`);
     actualizarEstadoConexion(false);
   } finally {
     mostrarCargando(false);
   }
 }
 
-// ─────────────────────────────────────
-//  RENDER
-// ─────────────────────────────────────
+// ─── RENDER ──────────────────────────────────────────────────
 function renderizarEventos(eventos) {
   eventosList.innerHTML = '';
-
   if (!eventos || eventos.length === 0) {
     emptyState.classList.remove('hidden');
     actualizarContadores([]);
     return;
   }
-
   emptyState.classList.add('hidden');
-
-  // Ordenar: más reciente primero
-  const ordenados = [...eventos].sort((a, b) =>
-    new Date(b.fechaHora) - new Date(a.fechaHora)
-  );
-
-  ordenados.forEach(evento => {
-    const card = crearTarjetaEvento(evento);
-    eventosList.appendChild(card);
-  });
-
+  const ordenados = [...eventos].sort((a, b) => new Date(b.fechaHora) - new Date(a.fechaHora));
+  ordenados.forEach(e => eventosList.appendChild(crearTarjeta(e)));
   actualizarContadores(eventos);
 }
 
-function crearTarjetaEvento(evento) {
+function crearTarjeta(evento) {
   const clone = template.content.cloneNode(true);
-  const card  = clone.querySelector('.evento-card');
 
-  // ID único para accesibilidad
-  card.setAttribute('aria-label', `Evento ${evento.modo} del ${formatearFecha(evento.fechaHora)}`);
-
-  // Badge de modo
   const badge = clone.querySelector('.evento-modo-badge');
   badge.textContent = evento.modo;
   badge.setAttribute('data-modo', evento.modo?.toUpperCase());
 
-  // Fecha
   clone.querySelector('.evento-fecha').textContent = formatearFecha(evento.fechaHora);
 
-  // Distancia
-  const distanciaValor = clone.querySelector('.distancia-valor');
-  if (evento.distanciaCm != null) {
-    distanciaValor.textContent = evento.distanciaCm.toFixed(1);
-  } else {
-    distanciaValor.textContent = 'N/A';
-    distanciaValor.style.setProperty('--content', '');
-    distanciaValor.style.cssText += ' --after-content: ""; ';
-    // Override el pseudo-elemento en este caso
-    distanciaValor.classList.add('sin-unidad');
-  }
+  const distVal = clone.querySelector('.distancia-valor');
+  distVal.textContent = evento.distanciaCm != null ? `${evento.distanciaCm.toFixed(1)} cm` : 'N/A';
 
-  // Resultado IA (solo modo ACTIVO)
   const eventoIa = clone.querySelector('.evento-ia');
   if (evento.modo?.toUpperCase() === 'ACTIVO' && evento.etiquetasIA) {
     eventoIa.classList.remove('hidden');
     clone.querySelector('.ia-valor').textContent = evento.etiquetasIA;
-
-    const btnEscuchar = clone.querySelector('.btn-escuchar');
-    btnEscuchar.addEventListener('click', () => {
-      leerEnVozAlta(evento.etiquetasIA, btnEscuchar);
+    clone.querySelector('.btn-escuchar').addEventListener('click', function() {
+      leerEnVozAlta(evento.etiquetasIA, this);
     });
   }
-
   return clone;
 }
 
 function actualizarContadores(eventos) {
-  const total  = eventos.length;
-  const pasivo = eventos.filter(e => e.modo?.toUpperCase() === 'PASIVO').length;
-  const activo = eventos.filter(e => e.modo?.toUpperCase() === 'ACTIVO').length;
-
-  countTotal.textContent  = total;
-  countPasivo.textContent = pasivo;
-  countActivo.textContent = activo;
+  countTotal.textContent  = eventos.length;
+  countPasivo.textContent = eventos.filter(e => e.modo?.toUpperCase() === 'PASIVO').length;
+  countActivo.textContent = eventos.filter(e => e.modo?.toUpperCase() === 'ACTIVO').length;
 }
 
-// ─────────────────────────────────────
-//  WEB SPEECH API
-// ─────────────────────────────────────
+// ─── WEB SPEECH API ──────────────────────────────────────────
 function leerEnVozAlta(texto, boton) {
-  if (!synth) {
-    alert('Tu navegador no soporta la API de síntesis de voz.');
-    return;
-  }
-
-  // Cancelar lectura anterior si está en curso
-  if (synth.speaking) {
-    synth.cancel();
-    boton.textContent = '🔊 Escuchar';
-    return;
-  }
-
-  // Limpiar errores conocidos del resultado antes de leer
-  const textoLimpio = texto
-    .replace('ERROR_VISION: ', 'Error en análisis visual: ')
-    .replace('SIN_IMAGEN', 'Sin imagen disponible');
-
-  const utterance = new SpeechSynthesisUtterance(
-    `Obstáculo identificado. Análisis de inteligencia artificial: ${textoLimpio}`
-  );
-  utterance.lang  = 'es-ES';
-  utterance.rate  = 0.9;
-  utterance.pitch = 1.0;
-
-  utterance.onstart = () => {
-    boton.textContent = '⏹ Detener';
-    boton.setAttribute('aria-label', 'Detener lectura en voz alta');
-  };
-  utterance.onend = utterance.onerror = () => {
-    boton.textContent = '🔊 Escuchar';
-    boton.setAttribute('aria-label', 'Escuchar resultado en voz alta');
-  };
-
-  synth.speak(utterance);
+  if (!synth) { alert('Tu navegador no soporta sintesis de voz.'); return; }
+  if (synth.speaking) { synth.cancel(); boton.textContent = '🔊 Escuchar'; return; }
+  const limpio = texto.replace('ERROR_VISION: ', 'Error visual: ').replace('SIN_IMAGEN', 'Sin imagen');
+  const u = new SpeechSynthesisUtterance(`Obstaculo identificado: ${limpio}`);
+  u.lang = 'es-ES'; u.rate = 0.9;
+  u.onstart = () => { boton.textContent = '⏹ Detener'; };
+  u.onend = u.onerror = () => { boton.textContent = '🔊 Escuchar'; };
+  synth.speak(u);
 }
 
-// ─────────────────────────────────────
-//  UI HELPERS
-// ─────────────────────────────────────
-function mostrarCargando(mostrar) {
-  loading.classList.toggle('hidden', !mostrar);
-  loading.setAttribute('aria-busy', mostrar ? 'true' : 'false');
+// ─── UI HELPERS ──────────────────────────────────────────────
+function mostrarCargando(v) {
+  loading.classList.toggle('hidden', !v);
+  loading.setAttribute('aria-busy', v ? 'true' : 'false');
 }
-
-function mostrarError(mensaje) {
-  errorBanner.textContent = `⚠ ${mensaje}`;
+function mostrarError(msg) {
+  errorBanner.textContent = `⚠ ${msg}`;
   errorBanner.classList.remove('hidden');
 }
-
 function ocultarError() {
   errorBanner.classList.add('hidden');
   errorBanner.textContent = '';
 }
-
 function actualizarEstadoConexion(online) {
   statusDot.className = `status-dot ${online ? 'online' : 'offline'}`;
-  statusText.textContent = online ? 'Backend conectado' : 'Sin conexión';
+  statusText.textContent = online ? 'Backend conectado' : 'Sin conexion';
 }
-
-function formatearFecha(isoString) {
-  if (!isoString) return '—';
+function formatearFecha(iso) {
+  if (!iso) return '—';
   try {
     return new Intl.DateTimeFormat('es-CO', {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit'
-    }).format(new Date(isoString));
-  } catch {
-    return isoString;
-  }
+      year:'numeric', month:'short', day:'numeric',
+      hour:'2-digit', minute:'2-digit', second:'2-digit'
+    }).format(new Date(iso));
+  } catch { return iso; }
 }
