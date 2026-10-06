@@ -1,0 +1,9 @@
+﻿# orbisFrontend — .gitignore
+# No subir archivos sensibles ni temporales
+.env
+.env.local
+.env.*.local
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
