@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ORBIS — Panel de monitoreo IoT para tecnologia asistiva con IA" />
-  <title>ORBIS — Panel de Monitoreo IoT</title>
+  <meta name="description" content="ORBIS Panel de monitoreo IoT para tecnologia asistiva con IA" />
+  <title>ORBIS - Panel de Monitoreo IoT</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -19,9 +19,7 @@
         <span class="logo-icon" aria-hidden="true">🦯</span>
         <span class="logo-text"><strong>ORBIS</strong> <span class="logo-sub">IoT Monitor</span></span>
       </div>
-      <div class="header-right">
-        <button id="btn-refresh" class="btn-icon" aria-label="Actualizar">↻</button>
-      </div>
+      <button id="btn-refresh" class="btn-icon" aria-label="Actualizar">↻</button>
     </div>
   </header>
 
@@ -30,19 +28,19 @@
     <section class="kpi-grid">
       <div class="kpi-card">
         <div class="kpi-icon">📊</div>
-        <div class="kpi-info"><span class="kpi-number" id="count-total">—</span><span class="kpi-label">Total Eventos</span></div>
+        <div class="kpi-info"><span class="kpi-number" id="count-total">-</span><span class="kpi-label">Total Eventos</span></div>
       </div>
       <div class="kpi-card">
         <div class="kpi-icon">🟢</div>
-        <div class="kpi-info"><span class="kpi-number" id="count-pasivo">—</span><span class="kpi-label">Modo Pasivo</span></div>
+        <div class="kpi-info"><span class="kpi-number" id="count-pasivo">-</span><span class="kpi-label">Modo Pasivo</span></div>
       </div>
       <div class="kpi-card">
         <div class="kpi-icon">🔵</div>
-        <div class="kpi-info"><span class="kpi-number" id="count-activo">—</span><span class="kpi-label">Modo Activo</span></div>
+        <div class="kpi-info"><span class="kpi-number" id="count-activo">-</span><span class="kpi-label">Modo Activo</span></div>
       </div>
       <div class="kpi-card">
         <div class="kpi-icon">📏</div>
-        <div class="kpi-info"><span class="kpi-number" id="avg-distancia">—</span><span class="kpi-label">Distancia Prom.</span></div>
+        <div class="kpi-info"><span class="kpi-number" id="avg-distancia">-</span><span class="kpi-label">Distancia Prom.</span></div>
       </div>
     </section>
 
@@ -66,19 +64,48 @@
           <h2>🤖 Simulador de Baston</h2>
           <span class="badge-sim">TEST MODE</span>
         </div>
-        <p class="sim-desc">Simula el envio de datos como si fuera el hardware ESP32 real.</p>
+        <p class="sim-desc">Simula el envio de datos como si fuera el hardware ESP32-CAM real.</p>
         <div class="sim-form">
+
           <div class="form-group">
             <label for="sim-modo">Modo de operacion</label>
             <select id="sim-modo" class="form-select">
-              <option value="PASIVO">PASIVO — Sensor ultrasonico</option>
-              <option value="ACTIVO">ACTIVO — Sensor + Camara IA</option>
+              <option value="PASIVO">PASIVO - Sensor ultrasonico</option>
+              <option value="ACTIVO">ACTIVO - Sensor + Camara IA</option>
             </select>
           </div>
+
           <div class="form-group">
             <label for="sim-distancia">Distancia detectada: <span id="sim-distancia-val">45 cm</span></label>
             <input type="range" id="sim-distancia" min="5" max="200" value="45" class="form-range" />
-          </div><div class="sim-actions">
+          </div>
+
+          <!-- CAMARA / IMAGEN (solo modo ACTIVO) -->
+          <div id="grupo-camara" class="hidden">
+            <div class="img-source-tabs">
+              <button class="src-btn active" id="btn-src-cam">📷 Camara en vivo</button>
+              <button class="src-btn" id="btn-src-file">📁 Subir foto</button>
+            </div>
+
+            <!-- Panel camara -->
+            <div id="panel-cam">
+              <video id="cam-video" class="cam-video" autoplay playsinline muted></video>
+              <canvas id="cam-canvas" class="hidden"></canvas>
+              <div class="cam-controls">
+                <button id="btn-cam-start" class="btn-cam-action">▶ Iniciar camara</button>
+                <button id="btn-cam-stop" class="btn-cam-action danger hidden">⏹ Detener</button>
+              </div>
+              <div id="cam-status" class="cam-status">Camara inactiva</div>
+            </div>
+
+            <!-- Panel archivo -->
+            <div id="panel-file" class="hidden">
+              <input type="file" id="sim-imagen" accept="image/*" class="form-input" />
+              <img id="sim-preview" class="sim-preview hidden" alt="Vista previa" />
+            </div>
+          </div>
+
+          <div class="sim-actions">
             <button id="btn-sim-enviar" class="btn-primary">📡 Enviar evento</button>
             <button id="btn-sim-auto" class="btn-secondary">⚡ Auto (5s)</button>
           </div>
@@ -105,22 +132,17 @@
         <div class="spinner"></div><span>Cargando eventos...</span>
       </div>
       <div class="table-wrapper">
-        <table id="eventos-table" class="eventos-table">
-          <thead>
-            <tr>
-              <th>ID</th><th>Modo</th><th>Distancia</th><th>Analisis IA</th><th>Fecha / Hora</th><th>Voz</th>
-            </tr>
-          </thead>
+        <table class="eventos-table">
+          <thead><tr>
+            <th>ID</th><th>Modo</th><th>Distancia</th><th>Analisis IA</th><th>Fecha / Hora</th><th>Voz</th>
+          </tr></thead>
           <tbody id="eventos-tbody"></tbody>
         </table>
       </div>
       <div id="empty-state" class="empty-state hidden">
-        <span>🦯</span>
-        <p>Sin eventos. Usa el simulador o conecta el hardware.</p>
+        <span>🦯</span><p>Sin eventos. Usa el simulador o conecta el hardware.</p>
       </div>
-      <div class="table-footer">
-        <span id="table-count" class="table-count"></span>
-      </div>
+      <div class="table-footer"><span id="table-count" class="table-count"></span></div>
     </section>
 
   </main>
