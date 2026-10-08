@@ -117,13 +117,17 @@ function detenerCamara() {
 }
 
 function capturarFrame() {
-  const video  = $('cam-video');
-  const canvas = $('cam-canvas');
+  const video  = document.getElementById('cam-video');
+  const canvas = document.getElementById('cam-canvas');
   if (!streamActivo || !video || !canvas) return null;
-  canvas.width  = video.videoWidth  || 640;
-  canvas.height = video.videoHeight || 480;
+  const MAX = 480;
+  const w = video.videoWidth  || 640;
+  const h = video.videoHeight || 480;
+  const ratio = Math.min(MAX/w, MAX/h, 1);
+  canvas.width  = Math.round(w * ratio);
+  canvas.height = Math.round(h * ratio);
   canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.85);
+  return canvas.toDataURL('image/jpeg', 0.5);
 }
 
 // ================================================================
