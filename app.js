@@ -285,8 +285,8 @@ function ocultarError() {
   errorBanner.classList.add('hidden');
 }
 function setStatus(online) {
-  statusDot.className = `status-dot ${online ? 'online' : 'offline'}`;
-  statusText.textContent = online ? 'Backend conectado' : 'Sin conexion';
+  if (statusDot)  statusDot.className = "status-dot " + (online ? "online" : "offline");
+  if (statusText) statusText.textContent = online ? "Backend conectado" : "Sin conexion";
 }
 function formatFecha(iso) {
   if (!iso) return '—';
