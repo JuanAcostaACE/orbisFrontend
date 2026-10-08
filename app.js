@@ -49,6 +49,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   filtroModo.addEventListener('change', renderTabla);
   filtroBuscar.addEventListener('input', renderTabla);
+
+  // Mostrar/ocultar campo imagen segun modo seleccionado
+  function actualizarCampoImagen() {
+    const g = document.getElementById('grupo-imagen');
+    if (g) g.style.display = document.getElementById('sim-modo').value === 'ACTIVO' ? 'block' : 'none';
+  }
+  document.getElementById('sim-modo').addEventListener('change', actualizarCampoImagen);
+  actualizarCampoImagen(); // mostrar al cargar si ACTIVO ya esta seleccionado
+
+  // Preview de imagen
+  document.getElementById('sim-imagen').addEventListener('change', function() {
+    const p = document.getElementById('sim-preview');
+    if (this.files[0]) { p.src = URL.createObjectURL(this.files[0]); p.classList.remove('hidden'); }
+    else { p.classList.add('hidden'); }
+  });
 });
 
 // ── FETCH ────────────────────────────────────────────────────
