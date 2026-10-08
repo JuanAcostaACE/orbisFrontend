@@ -224,3 +224,16 @@ body {
   border-radius: 8px; margin-top: 8px;
   border: 1px solid var(--border);
 }
+/* ── CAMARA SIMULADOR ────────────────────────────────────────── */
+.img-source-tabs { display: flex; gap: 0.4rem; margin-bottom: 0.6rem; }
+.src-btn {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 0.78rem;
+  transition: all 0.2s; font-family: inherit;
+}
+.src-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cam-video {
+  width: 100%; border-radius: 8px; border: 1px solid var(--border);
+  max-height: 180px; object-fit: cover; background: #000;
+}
+.cam-controls { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
