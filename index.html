@@ -79,6 +79,12 @@
             <label for="sim-distancia">Distancia detectada: <span id="sim-distancia-val">45 cm</span></label>
             <input type="range" id="sim-distancia" min="5" max="200" value="45" class="form-range" />
           </div>
+                    <div class="form-group" id="grupo-imagen" style="display:none">
+            <label for="sim-imagen">Imagen para analizar con IA</label>
+            <input type="file" id="sim-imagen" accept="image/*" class="form-input" />
+            <span class="sim-img-hint">Sube una foto del obstaculo (pared, silla, persona...)</span>
+            <img id="sim-preview" class="sim-preview hidden" alt="Vista previa" />
+          </div>
           <div class="sim-actions">
             <button id="btn-sim-enviar" class="btn-primary">📡 Enviar evento</button>
             <button id="btn-sim-auto" class="btn-secondary">⚡ Auto (5s)</button>
