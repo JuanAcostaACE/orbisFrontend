@@ -3,85 +3,132 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ORBIS — Panel de monitoreo IoT para tecnologia asistiva con IA para personas con discapacidad visual" />
-  <title>ORBIS — Panel de Eventos</title>
+  <meta name="description" content="ORBIS — Panel de monitoreo IoT para tecnologia asistiva con IA" />
+  <title>ORBIS — Panel de Monitoreo IoT</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
   <header class="header" role="banner">
     <div class="header-inner">
-      <div class="logo" aria-label="ORBIS">
+      <div class="logo">
         <span class="logo-icon" aria-hidden="true">🦯</span>
-        <span class="logo-text"><strong>ORBIS</strong></span>
+        <span class="logo-text"><strong>ORBIS</strong> <span class="logo-sub">IoT Monitor</span></span>
       </div>
-      <div class="status-bar">
-        <span id="status-dot" class="status-dot" aria-hidden="true"></span>
-        <span id="status-text" class="status-text">Conectando...</span>
+      <div class="header-right">
+        <div class="status-bar">
+          <span id="status-dot" class="status-dot"></span>
+          <span id="status-text" class="status-text">Conectando...</span>
+        </div>
+        <button id="btn-refresh" class="btn-icon" aria-label="Actualizar">↻</button>
       </div>
     </div>
   </header>
 
   <main class="main" role="main">
-    <section class="summary" aria-label="Resumen de actividad">
-      <div class="stat-card">
-        <span class="stat-number" id="count-total">—</span>
-        <span class="stat-label">Total eventos</span>
+
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-icon">📊</div>
+        <div class="kpi-info"><span class="kpi-number" id="count-total">—</span><span class="kpi-label">Total Eventos</span></div>
       </div>
-      <div class="stat-card">
-        <span class="stat-number" id="count-pasivo">—</span>
-        <span class="stat-label">Modo Pasivo</span>
+      <div class="kpi-card">
+        <div class="kpi-icon">🟢</div>
+        <div class="kpi-info"><span class="kpi-number" id="count-pasivo">—</span><span class="kpi-label">Modo Pasivo</span></div>
       </div>
-      <div class="stat-card">
-        <span class="stat-number" id="count-activo">—</span>
-        <span class="stat-label">Modo Activo</span>
+      <div class="kpi-card">
+        <div class="kpi-icon">🔵</div>
+        <div class="kpi-info"><span class="kpi-number" id="count-activo">—</span><span class="kpi-label">Modo Activo</span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">📏</div>
+        <div class="kpi-info"><span class="kpi-number" id="avg-distancia">—</span><span class="kpi-label">Distancia Prom.</span></div>
       </div>
     </section>
 
-    <section class="eventos-section" aria-label="Lista de eventos">
-      <div class="section-header">
-        <h1>Eventos registrados</h1>
-        <button id="btn-refresh" class="btn-refresh" aria-label="Actualizar lista de eventos">
-          Actualizar
-        </button>
+    <div class="dashboard-grid">
+
+      <section class="card chart-card">
+        <div class="card-header">
+          <h2>📈 Eventos por modo</h2>
+          <div class="chart-tabs">
+            <button class="tab-btn active" id="btn-chart-bar">Barras</button>
+            <button class="tab-btn" id="btn-chart-line">Linea</button>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="eventos-chart"></canvas>
+        </div>
+      </section>
+
+      <section class="card sim-card">
+        <div class="card-header">
+          <h2>🤖 Simulador de Baston</h2>
+          <span class="badge-sim">TEST MODE</span>
+        </div>
+        <p class="sim-desc">Simula el envio de datos como si fuera el hardware ESP32 real.</p>
+        <div class="sim-form">
+          <div class="form-group">
+            <label for="sim-modo">Modo de operacion</label>
+            <select id="sim-modo" class="form-select">
+              <option value="PASIVO">PASIVO — Sensor ultrasonico</option>
+              <option value="ACTIVO">ACTIVO — Sensor + Camara IA</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="sim-distancia">Distancia detectada: <span id="sim-distancia-val">45 cm</span></label>
+            <input type="range" id="sim-distancia" min="5" max="200" value="45" class="form-range" />
+          </div>
+          <div class="sim-actions">
+            <button id="btn-sim-enviar" class="btn-primary">📡 Enviar evento</button>
+            <button id="btn-sim-auto" class="btn-secondary">⚡ Auto (5s)</button>
+          </div>
+          <div id="sim-result" class="sim-result hidden"></div>
+        </div>
+      </section>
+
+    </div>
+
+    <section class="card table-card">
+      <div class="card-header">
+        <h2>📋 Historial de Eventos</h2>
+        <div class="table-filters">
+          <select id="filtro-modo" class="form-select sm">
+            <option value="">Todos los modos</option>
+            <option value="PASIVO">Pasivo</option>
+            <option value="ACTIVO">Activo</option>
+          </select>
+          <input type="text" id="filtro-buscar" class="form-input sm" placeholder="Buscar IA..." />
+        </div>
       </div>
       <div id="error-banner" class="error-banner hidden" role="alert" aria-live="polite"></div>
-      <div id="loading" class="loading" aria-live="polite" aria-busy="true">
-        <div class="spinner" aria-hidden="true"></div>
-        <span>Cargando eventos...</span>
+      <div id="loading" class="loading" aria-live="polite">
+        <div class="spinner"></div><span>Cargando eventos...</span>
       </div>
-      <ul id="eventos-list" class="eventos-list" role="list" aria-label="Eventos de ORBIS"></ul>
-      <div id="empty-state" class="empty-state hidden" aria-live="polite">
-        <span aria-hidden="true">📡</span>
-        <p>Aun no hay eventos. El baston enviara datos cuando detecte obstaculos.</p>
+      <div class="table-wrapper">
+        <table id="eventos-table" class="eventos-table">
+          <thead>
+            <tr>
+              <th>ID</th><th>Modo</th><th>Distancia</th><th>Analisis IA</th><th>Fecha / Hora</th><th>Voz</th>
+            </tr>
+          </thead>
+          <tbody id="eventos-tbody"></tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="empty-state hidden">
+        <span>🦯</span>
+        <p>Sin eventos. Usa el simulador o conecta el hardware.</p>
+      </div>
+      <div class="table-footer">
+        <span id="table-count" class="table-count"></span>
       </div>
     </section>
+
   </main>
-
-  <template id="evento-template">
-    <li class="evento-card" role="listitem">
-      <div class="evento-header">
-        <span class="evento-modo-badge" data-modo></span>
-        <span class="evento-fecha" aria-label="Fecha y hora"></span>
-      </div>
-      <div class="evento-body">
-        <div class="evento-distancia">
-          <span class="evento-label">Distancia</span>
-          <span class="evento-valor distancia-valor"></span>
-        </div>
-        <div class="evento-ia hidden">
-          <span class="evento-label">Analisis IA</span>
-          <span class="evento-valor ia-valor"></span>
-          <button class="btn-escuchar" aria-label="Escuchar resultado en voz alta">
-            🔊 Escuchar
-          </button>
-        </div>
-      </div>
-    </li>
-  </template>
-
   <script src="app.js"></script>
 </body>
 </html>
