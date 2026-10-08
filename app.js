@@ -226,10 +226,14 @@ async function enviarSimulacion() {
   simResult.textContent = 'Enviando al backend...';
 
   try {
-    // Convertir imagen a Base64 si existe y modo es ACTIVO
+    // Obtener imagen segun la fuente activa (archivo o camara)
     let imagenBase64 = null;
-    if (modo === 'ACTIVO' && fileInput.files[0]) {
-      imagenBase64 = await imagenABase64(fileInput.files[0]);
+    if (modo === 'ACTIVO') {
+      if (fuenteImagen === 'cam' && streamActivo) {
+        imagenBase64 = capturarFrameCamara(); // Frame actual de la webcam
+      } else if (fuenteImagen === 'file' && fileInput && fileInput.files[0]) {
+        imagenBase64 = await imagenABase64(fileInput.files[0]);
+      }
     }
     const body = { modo, distanciaCm: distancia, imagenUrl: imagenBase64 };
     const res  = await fetch(EP_EVENTOS, {
@@ -311,4 +315,70 @@ function formatFecha(iso) {
       hour: '2-digit', minute: '2-digit', second: '2-digit'
     }).format(new Date(iso));
   } catch { return iso; }
+}
+
+// ── CAMARA EN TIEMPO REAL ────────────────────────────────────
+let streamActivo = null;
+let fuenteImagen = 'file'; // 'file' o 'cam'
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Tabs de fuente de imagen
+  const btnFile = document.getElementById('btn-src-file');
+  const btnCam  = document.getElementById('btn-src-cam');
+  if (btnFile) btnFile.addEventListener('click', () => cambiarFuente('file'));
+  if (btnCam)  btnCam.addEventListener('click',  () => cambiarFuente('cam'));
+
+  // Camara on/off
+  const btnStart = document.getElementById('btn-cam-start');
+  const btnStop  = document.getElementById('btn-cam-stop');
+  if (btnStart) btnStart.addEventListener('click', iniciarCamara);
+  if (btnStop)  btnStop.addEventListener('click',  detenerCamara);
+
+  // Preview de archivo
+  const simImg = document.getElementById('sim-imagen');
+  if (simImg) simImg.addEventListener('change', function() {
+    const p = document.getElementById('sim-preview');
+    if (p && this.files[0]) { p.src = URL.createObjectURL(this.files[0]); p.classList.remove('hidden'); }
+  });
+});
+
+function cambiarFuente(fuente) {
+  fuenteImagen = fuente;
+  document.getElementById('btn-src-file').classList.toggle('active', fuente === 'file');
+  document.getElementById('btn-src-cam').classList.toggle('active',  fuente === 'cam');
+  document.getElementById('panel-file').classList.toggle('hidden', fuente !== 'file');
+  document.getElementById('panel-cam').classList.toggle('hidden',  fuente !== 'cam');
+  if (fuente !== 'cam') detenerCamara();
+}
+
+async function iniciarCamara() {
+  try {
+    streamActivo = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    const video = document.getElementById('cam-video');
+    video.srcObject = streamActivo;
+    document.getElementById('btn-cam-start').classList.add('hidden');
+    document.getElementById('btn-cam-stop').classList.remove('hidden');
+  } catch (e) {
+    alert('No se pudo acceder a la camara: ' + e.message);
+  }
+}
+
+function detenerCamara() {
+  if (streamActivo) { streamActivo.getTracks().forEach(t => t.stop()); streamActivo = null; }
+  const video = document.getElementById('cam-video');
+  if (video) video.srcObject = null;
+  const btnStart = document.getElementById('btn-cam-start');
+  const btnStop  = document.getElementById('btn-cam-stop');
+  if (btnStart) btnStart.classList.remove('hidden');
+  if (btnStop)  btnStop.classList.add('hidden');
+}
+
+function capturarFrameCamara() {
+  const video  = document.getElementById('cam-video');
+  const canvas = document.getElementById('cam-canvas');
+  if (!video || !canvas || !streamActivo) return null;
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.8); // Base64 JPEG
 }
