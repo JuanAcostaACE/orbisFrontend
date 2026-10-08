@@ -189,10 +189,20 @@ function cambiarChart(tipo) {
 }
 
 // ── SIMULADOR ────────────────────────────────────────────────
+async function imagenABase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = e => resolve(e.target.result); // incluye prefijo data:image/...;base64,
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 async function enviarSimulacion() {
   const modo       = $('sim-modo').value;
   const distancia  = parseFloat($('sim-distancia').value);
   const btn        = $('btn-sim-enviar');
+  const fileInput  = $('sim-imagen');
 
   btn.disabled = true;
   btn.textContent = '⏳ Enviando...';
@@ -201,7 +211,12 @@ async function enviarSimulacion() {
   simResult.textContent = 'Enviando al backend...';
 
   try {
-    const body = { modo, distanciaCm: distancia };
+    // Convertir imagen a Base64 si existe y modo es ACTIVO
+    let imagenBase64 = null;
+    if (modo === 'ACTIVO' && fileInput.files[0]) {
+      imagenBase64 = await imagenABase64(fileInput.files[0]);
+    }
+    const body = { modo, distanciaCm: distancia, imagenUrl: imagenBase64 };
     const res  = await fetch(EP_EVENTOS, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },

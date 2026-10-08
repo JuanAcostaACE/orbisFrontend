@@ -217,3 +217,10 @@ body {
   font-size: 0.82rem; margin-bottom: 0.75rem;
 }
 .hidden { display: none !important; }
+/* ── IMAGEN SIMULADOR ────────────────────────────────────────── */
+.sim-img-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+.sim-preview {
+  width: 100%; max-height: 140px; object-fit: cover;
+  border-radius: 8px; margin-top: 8px;
+  border: 1px solid var(--border);
+}
