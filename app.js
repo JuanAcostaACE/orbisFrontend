@@ -249,50 +249,78 @@ async function imagenABase64(file) {
   });
 }
 
-async function enviarSimulacion() {
-  const modo      = $('sim-modo').value;
-  const distancia = parseFloat($('sim-distancia').value);
-  const btn       = $('btn-sim-enviar');
+// ================================================================
+// HUGGING FACE - llamada directa desde el navegador
+// ================================================================
+async function analizarConIA(dataUrl) {
+  const HF_TOKEN = document.getElementById('hf-token-input') ? 
+                   document.getElementById('hf-token-input').value : 
+                   sessionStorage.getItem('hf_token') || '';
+  if (!HF_TOKEN) throw new Error('Token HF no configurado');
+  
+  const blob = await (await fetch(dataUrl)).blob();
+  const r = await fetch('https://api-inference.huggingface.co/models/microsoft/resnet-50', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + HF_TOKEN },
+    body: blob
+  });
+  if (r.status === 503) throw new Error('Modelo IA cargando, espere 20 seg y reintente');
+  if (!r.ok) throw new Error('HF error ' + r.status);
+  const data = await r.json();
+  if (data.error) throw new Error(data.error);
+  return (data || []).slice(0,3).map(d => {
+    let l = d.label || '';
+    if (l.includes(',')) l = l.split(',').pop().trim();
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  }).join(', ') || 'Objeto detectado';
+}
 
-  btn.disabled = true;
-  btn.textContent = 'Enviando...';
+async function enviarSimulacion() {
+  const modo      = document.getElementById('sim-modo').value;
+  const distancia = parseFloat(document.getElementById('sim-distancia').value);
+  const btn       = document.getElementById('btn-sim-enviar');
+  btn.disabled = true; btn.textContent = 'Procesando...';
   simResult.className = 'sim-result';
   simResult.classList.remove('hidden');
-  simResult.textContent = 'Enviando al backend...';
+  simResult.textContent = 'Procesando...';
 
   try {
-    let imagenBase64 = null;
+    let etiquetasIA = null;
     if (modo === 'ACTIVO') {
+      let dataUrl = null;
       if (fuenteImagen === 'cam' && streamActivo) {
-        imagenBase64 = capturarFrame();
-        if (!imagenBase64) throw new Error('No se pudo capturar frame de la camara');
+        dataUrl = capturarFrame();
+        if (!dataUrl) throw new Error('No se pudo capturar la camara');
       } else if (fuenteImagen === 'file') {
-        const fi = $('sim-imagen');
-        if (fi && fi.files[0]) imagenBase64 = await imagenABase64(fi.files[0]);
+        const fi = document.getElementById('sim-imagen');
+        if (fi && fi.files[0]) dataUrl = await imagenABase64(fi.files[0]);
+      }
+      if (dataUrl) {
+        simResult.textContent = 'Analizando con IA...';
+        try { etiquetasIA = await analizarConIA(dataUrl); }
+        catch(iaErr) { etiquetasIA = 'ERROR_IA: ' + iaErr.message; }
       }
     }
 
-    const body = { modo, distanciaCm: distancia, imagenUrl: imagenBase64 };
-    const res  = await fetch(EP_EVENTOS, {
+    const body = { modo, distanciaCm: distancia, etiquetasIA };
+    const res = await fetch(EP_EVENTOS, {
       method: 'POST',
-      headers: { 'Content-Type':'application/json', Accept:'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body)
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     simResult.classList.add('success');
-    const ia = data.etiquetasIA && data.etiquetasIA !== 'SIN_IMAGEN' ? ` | IA: ${data.etiquetasIA}` : '';
-    simResult.textContent = `Evento #${data.id} registrado - ${modo} | ${distancia} cm${ia}`;
+    const ia = data.etiquetasIA && data.etiquetasIA !== 'SIN_IMAGEN' ? ' | IA: ' + data.etiquetasIA : '';
+    simResult.textContent = 'Evento #' + data.id + ' - ' + modo + ' | ' + distancia + ' cm' + ia;
     await cargarEventos();
   } catch(e) {
     simResult.classList.add('error');
-    simResult.textContent = `Error: ${e.message}`;
+    simResult.textContent = 'Error: ' + e.message;
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Enviar evento';
+    btn.disabled = false; btn.textContent = 'Enviar evento';
   }
 }
-
 function toggleAuto() {
   const btn = $('btn-sim-auto');
   if (autoRunning) {
