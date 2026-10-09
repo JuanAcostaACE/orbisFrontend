@@ -9,6 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -82,11 +84,8 @@
 
           <!-- CAMARA / IMAGEN (solo modo ACTIVO) -->
           <div id="grupo-camara" class="hidden">
-            <div class="form-group" style="margin-bottom:0.6rem">
-              <label for="hf-token-input" style="font-size:0.75rem;color:var(--text-muted)">Token Hugging Face (hf_...)</label>
-              <input type="password" id="hf-token-input" class="form-input" placeholder="hf_xxxxxxxxxxxxx" 
-                     oninput="sessionStorage.setItem('hf_token',this.value)" />
-            </div>
+            <!-- IA corre localmente en el navegador con MobileNet - sin API keys -->
+            <div id="ia-status" style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem;text-align:center">⏳ Cargando modelo IA...</div>
             <div class="img-source-tabs">
               <button class="src-btn active" id="btn-src-cam">📷 Camara en vivo</button>
               <button class="src-btn" id="btn-src-file">📁 Subir foto</button>
