@@ -252,23 +252,40 @@ async function imagenABase64(file) {
 // ================================================================
 // HUGGING FACE - llamada directa desde el navegador
 // ================================================================
+// Convierte dataURL base64 a Blob binario sin usar fetch()
+function dataUrlABlob(dataUrl) {
+  const partes = dataUrl.split(',');
+  const mime   = partes[0].match(/:(.*?);/)[1];
+  const bytes  = atob(partes[1]);
+  const arr    = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
 async function analizarConIA(dataUrl) {
-  const HF_TOKEN = document.getElementById('hf-token-input') ? 
-                   document.getElementById('hf-token-input').value : 
-                   sessionStorage.getItem('hf_token') || '';
-  if (!HF_TOKEN) throw new Error('Token HF no configurado');
-  
-  const blob = await (await fetch(dataUrl)).blob();
+  const inputEl  = document.getElementById('hf-token-input');
+  const HF_TOKEN = (inputEl ? inputEl.value : '') || sessionStorage.getItem('hf_token') || '';
+  if (!HF_TOKEN || HF_TOKEN.trim() === '') {
+    throw new Error('Ingrese su token hf_ en el campo Token Hugging Face');
+  }
+  sessionStorage.setItem('hf_token', HF_TOKEN.trim());
+
+  const blob = dataUrlABlob(dataUrl); // conversion manual sin fetch()
+
   const r = await fetch('https://api-inference.huggingface.co/models/microsoft/resnet-50', {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + HF_TOKEN },
+    headers: { 'Authorization': 'Bearer ' + HF_TOKEN.trim() },
     body: blob
   });
-  if (r.status === 503) throw new Error('Modelo IA cargando, espere 20 seg y reintente');
-  if (!r.ok) throw new Error('HF error ' + r.status);
+  if (r.status === 503) {
+    const body = await r.json().catch(() => ({}));
+    if (body.estimated_time) throw new Error('Modelo cargando, espere ' + Math.ceil(body.estimated_time) + 's y reintente');
+    throw new Error('Modelo IA cargando, espere 20 seg y reintente');
+  }
+  if (!r.ok) throw new Error('HF HTTP ' + r.status + ' - verifique su token');
   const data = await r.json();
-  if (data.error) throw new Error(data.error);
-  return (data || []).slice(0,3).map(d => {
+  if (data && data.error) throw new Error(data.error);
+  return (Array.isArray(data) ? data : []).slice(0, 3).map(d => {
     let l = d.label || '';
     if (l.includes(',')) l = l.split(',').pop().trim();
     return l.charAt(0).toUpperCase() + l.slice(1);
