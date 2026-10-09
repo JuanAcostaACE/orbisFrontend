@@ -39,6 +39,8 @@ let fuenteImagen = 'cam'; // 'cam' o 'file'
 document.addEventListener('DOMContentLoaded', () => {
   cargarEventos();
   setInterval(cargarEventos, REFRESH_MS);
+  // Pre-cargar modelo IA en background
+  cargarModeloIA().catch(() => {});
 
   $('btn-refresh').addEventListener('click', cargarEventos);
   $('btn-chart-bar').addEventListener('click', () => cambiarChart('bar'));
@@ -252,46 +254,57 @@ async function imagenABase64(file) {
 // ================================================================
 // HUGGING FACE - llamada directa desde el navegador
 // ================================================================
-// Convierte dataURL base64 a Blob binario sin usar fetch()
-function dataUrlABlob(dataUrl) {
-  const partes = dataUrl.split(',');
-  const mime   = partes[0].match(/:(.*?);/)[1];
-  const bytes  = atob(partes[1]);
-  const arr    = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-  return new Blob([arr], { type: mime });
+// ================================================================
+// IA LOCAL CON MOBILENET (TensorFlow.js) - sin API externa
+// ================================================================
+let mobilenetModel = null;
+let modeloCargando = false;
+
+async function cargarModeloIA() {
+  if (mobilenetModel) return mobilenetModel;
+  if (modeloCargando) {
+    // Esperar hasta que cargue
+    while (modeloCargando) await new Promise(r => setTimeout(r, 200));
+    return mobilenetModel;
+  }
+  modeloCargando = true;
+  const statusEl = document.getElementById('ia-status');
+  try {
+    if (statusEl) statusEl.textContent = 'Cargando modelo IA (~5MB)...';
+    mobilenetModel = await mobilenet.load({ version: 2, alpha: 1.0 });
+    if (statusEl) { statusEl.textContent = 'Modelo IA listo'; statusEl.style.color = '#22c55e'; }
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = 'Error al cargar modelo IA'; statusEl.style.color = '#ef4444'; }
+    throw e;
+  } finally {
+    modeloCargando = false;
+  }
+  return mobilenetModel;
 }
 
 async function analizarConIA(dataUrl) {
-  const inputEl  = document.getElementById('hf-token-input');
-  const HF_TOKEN = (inputEl ? inputEl.value : '') || sessionStorage.getItem('hf_token') || '';
-  if (!HF_TOKEN || HF_TOKEN.trim() === '') {
-    throw new Error('Ingrese su token hf_ en el campo Token Hugging Face');
-  }
-  sessionStorage.setItem('hf_token', HF_TOKEN.trim());
+  const modelo = await cargarModeloIA();
+  const video  = document.getElementById('cam-video');
 
-  const blob = dataUrlABlob(dataUrl); // conversion manual sin fetch()
-
-  const r = await fetch('https://api-inference.huggingface.co/models/microsoft/resnet-50', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + HF_TOKEN.trim() },
-    body: blob
-  });
-  if (r.status === 503) {
-    const body = await r.json().catch(() => ({}));
-    if (body.estimated_time) throw new Error('Modelo cargando, espere ' + Math.ceil(body.estimated_time) + 's y reintente');
-    throw new Error('Modelo IA cargando, espere 20 seg y reintente');
+  let predicciones;
+  if (fuenteImagen === 'cam' && streamActivo && video) {
+    // Analizar directamente el elemento video (mas rapido)
+    predicciones = await modelo.classify(video, 3);
+  } else {
+    // Analizar imagen estatica
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise(r => { img.onload = r; });
+    predicciones = await modelo.classify(img, 3);
   }
-  if (!r.ok) throw new Error('HF HTTP ' + r.status + ' - verifique su token');
-  const data = await r.json();
-  if (data && data.error) throw new Error(data.error);
-  return (Array.isArray(data) ? data : []).slice(0, 3).map(d => {
-    let l = d.label || '';
-    if (l.includes(',')) l = l.split(',').pop().trim();
-    return l.charAt(0).toUpperCase() + l.slice(1);
+
+  return predicciones.map(p => {
+    let label = p.className || '';
+    // MobileNet devuelve labels compuestas: "tabby, tabby cat" -> tomar el ultimo
+    if (label.includes(',')) label = label.split(',').pop().trim();
+    return label.charAt(0).toUpperCase() + label.slice(1);
   }).join(', ') || 'Objeto detectado';
 }
-
 async function enviarSimulacion() {
   const modo      = document.getElementById('sim-modo').value;
   const distancia = parseFloat(document.getElementById('sim-distancia').value);
