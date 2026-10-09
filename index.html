@@ -82,6 +82,11 @@
 
           <!-- CAMARA / IMAGEN (solo modo ACTIVO) -->
           <div id="grupo-camara" class="hidden">
+            <div class="form-group" style="margin-bottom:0.6rem">
+              <label for="hf-token-input" style="font-size:0.75rem;color:var(--text-muted)">Token Hugging Face (hf_...)</label>
+              <input type="password" id="hf-token-input" class="form-input" placeholder="hf_xxxxxxxxxxxxx" 
+                     oninput="sessionStorage.setItem('hf_token',this.value)" />
+            </div>
             <div class="img-source-tabs">
               <button class="src-btn active" id="btn-src-cam">📷 Camara en vivo</button>
               <button class="src-btn" id="btn-src-file">📁 Subir foto</button>
