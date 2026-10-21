@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ORBIS Panel de monitoreo IoT para tecnologia asistiva con IA" />
+  <meta name="description" content="ORBIS Panel de monitoreo IoT para tecnología asistiva con IA" />
   <title>ORBIS - Panel de Monitoreo IoT</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -15,141 +15,229 @@
 </head>
 <body>
 
-  <header class="header" role="banner">
-    <div class="header-inner">
-      <div class="logo">
-        <span class="logo-icon" aria-hidden="true">🦯</span>
-        <span class="logo-text"><strong>ORBIS</strong> <span class="logo-sub">IoT Monitor</span></span>
+  <!-- ════════════════════════════════════
+       PANTALLA DE AUTENTICACIÓN
+       Se muestra si no hay sesión activa.
+       ════════════════════════════════════ -->
+  <div id="pantalla-auth" class="auth-screen" role="main" aria-label="Autenticación">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span aria-hidden="true">🦯</span>
+        <h1 class="auth-title">ORBIS</h1>
+        <p class="auth-subtitle">Panel IoT de Monitoreo Asistivo</p>
       </div>
-      <button id="btn-refresh" class="btn-icon" aria-label="Actualizar">↻</button>
-    </div>
-  </header>
 
-  <main class="main" role="main">
+      <!-- Tabs login / registro -->
+      <div class="auth-tabs" role="tablist">
+        <button id="tab-login" class="auth-tab active" role="tab" aria-selected="true" aria-controls="form-login">
+          Iniciar sesión
+        </button>
+        <button id="tab-registro" class="auth-tab" role="tab" aria-selected="false" aria-controls="form-registro">
+          Crear cuenta
+        </button>
+      </div>
 
-    <section class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-icon">📊</div>
-        <div class="kpi-info"><span class="kpi-number" id="count-total">-</span><span class="kpi-label">Total Eventos</span></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-icon">🟢</div>
-        <div class="kpi-info"><span class="kpi-number" id="count-pasivo">-</span><span class="kpi-label">Modo Pasivo</span></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-icon">🔵</div>
-        <div class="kpi-info"><span class="kpi-number" id="count-activo">-</span><span class="kpi-label">Modo Activo</span></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-icon">📏</div>
-        <div class="kpi-info"><span class="kpi-number" id="avg-distancia">-</span><span class="kpi-label">Distancia Prom.</span></div>
-      </div>
-    </section>
+      <!-- Mensaje de estado (errores / éxito) -->
+      <div id="auth-mensaje" class="auth-msg" role="alert" aria-live="polite"></div>
 
-    <div class="dashboard-grid">
-
-      <section class="card chart-card">
-        <div class="card-header">
-          <h2>📈 Eventos por modo</h2>
-          <div class="chart-tabs">
-            <button class="tab-btn active" id="btn-chart-bar">Barras</button>
-            <button class="tab-btn" id="btn-chart-line">Linea</button>
-          </div>
+      <!-- Formulario Login -->
+      <form id="form-login" class="auth-form" aria-labelledby="tab-login" novalidate>
+        <div class="form-group">
+          <label for="login-correo">Correo electrónico</label>
+          <input id="login-correo" type="email" class="form-input" placeholder="correo@ejemplo.com"
+                 autocomplete="email" required />
         </div>
-        <div class="chart-container">
-          <canvas id="eventos-chart"></canvas>
+        <div class="form-group">
+          <label for="login-pass">Contraseña</label>
+          <input id="login-pass" type="password" class="form-input" placeholder="••••••••"
+                 autocomplete="current-password" required />
+        </div>
+        <button id="btn-login" type="button" class="btn-primary btn-full">
+          Iniciar sesión
+        </button>
+      </form>
+
+      <!-- Formulario Registro -->
+      <form id="form-registro" class="auth-form hidden" aria-labelledby="tab-registro" novalidate>
+        <div class="form-group">
+          <label for="reg-nombre">Nombre completo</label>
+          <input id="reg-nombre" type="text" class="form-input" placeholder="Tu nombre"
+                 autocomplete="name" required />
+        </div>
+        <div class="form-group">
+          <label for="reg-correo">Correo electrónico</label>
+          <input id="reg-correo" type="email" class="form-input" placeholder="correo@ejemplo.com"
+                 autocomplete="email" required />
+        </div>
+        <div class="form-group">
+          <label for="reg-pass">Contraseña <small>(mínimo 8 caracteres)</small></label>
+          <input id="reg-pass" type="password" class="form-input" placeholder="••••••••"
+                 autocomplete="new-password" required minlength="8" />
+        </div>
+        <button id="btn-registro" type="button" class="btn-primary btn-full">
+          Crear cuenta
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       PANTALLA DASHBOARD (requiere sesión)
+       ════════════════════════════════════ -->
+  <div id="pantalla-dashboard" class="hidden">
+
+    <header class="header" role="banner">
+      <div class="header-inner">
+        <div class="logo">
+          <span class="logo-icon" aria-hidden="true">🦯</span>
+          <span class="logo-text"><strong>ORBIS</strong> <span class="logo-sub">IoT Monitor</span></span>
+        </div>
+        <div class="header-actions">
+          <span id="usuario-correo" class="usuario-correo"></span>
+          <button id="btn-refresh" class="btn-icon" aria-label="Actualizar datos">↻</button>
+          <button id="btn-logout" class="btn-logout" aria-label="Cerrar sesión">Salir</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="main" role="main">
+
+      <section class="kpi-grid" aria-label="Indicadores clave">
+        <div class="kpi-card">
+          <div class="kpi-icon">📊</div>
+          <div class="kpi-info"><span class="kpi-number" id="count-total">-</span><span class="kpi-label">Total Eventos</span></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon">🟢</div>
+          <div class="kpi-info"><span class="kpi-number" id="count-pasivo">-</span><span class="kpi-label">Modo Pasivo</span></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon">🔵</div>
+          <div class="kpi-info"><span class="kpi-number" id="count-activo">-</span><span class="kpi-label">Modo Activo</span></div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon">📏</div>
+          <div class="kpi-info"><span class="kpi-number" id="avg-distancia">-</span><span class="kpi-label">Distancia Prom.</span></div>
         </div>
       </section>
 
-      <section class="card sim-card">
-        <div class="card-header">
-          <h2>🤖 Simulador de Baston</h2>
-          <span class="badge-sim">TEST MODE</span>
-        </div>
-        <p class="sim-desc">Simula el envio de datos como si fuera el hardware ESP32-CAM real.</p>
-        <div class="sim-form">
+      <div class="dashboard-grid">
 
-          <div class="form-group">
-            <label for="sim-modo">Modo de operacion</label>
-            <select id="sim-modo" class="form-select">
-              <option value="PASIVO">PASIVO - Sensor ultrasonico</option>
-              <option value="ACTIVO">ACTIVO - Sensor + Camara IA</option>
-            </select>
+        <section class="card chart-card" aria-labelledby="h2-chart">
+          <div class="card-header">
+            <h2 id="h2-chart">📈 Eventos por modo</h2>
+            <div class="chart-tabs">
+              <button class="tab-btn active" id="btn-chart-bar">Barras</button>
+              <button class="tab-btn" id="btn-chart-line">Línea</button>
+            </div>
           </div>
-
-          <div class="form-group">
-            <label for="sim-distancia">Distancia detectada: <span id="sim-distancia-val">45 cm</span></label>
-            <input type="range" id="sim-distancia" min="5" max="200" value="45" class="form-range" />
+          <div class="chart-container">
+            <canvas id="eventos-chart" aria-label="Gráfica de eventos por modo y fecha"></canvas>
           </div>
+        </section>
 
-          <!-- CAMARA / IMAGEN (solo modo ACTIVO) -->
-          <div id="grupo-camara" class="hidden">
-            <!-- IA corre localmente en el navegador con MobileNet - sin API keys -->
-            <div id="ia-status" style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem;text-align:center">⏳ Cargando modelo IA...</div>
-            <div class="img-source-tabs">
-              <button class="src-btn active" id="btn-src-cam">📷 Camara en vivo</button>
-              <button class="src-btn" id="btn-src-file">📁 Subir foto</button>
+        <section class="card sim-card" aria-labelledby="h2-sim">
+          <div class="card-header">
+            <h2 id="h2-sim">🤖 Simulador de Bastón</h2>
+            <span class="badge-sim">TEST MODE</span>
+          </div>
+          <p class="sim-desc">Simula el envío de datos como si fuera el hardware ESP32 real.</p>
+          <div class="sim-form">
+
+            <div class="form-group">
+              <label for="sim-modo">Modo de operación</label>
+              <select id="sim-modo" class="form-select">
+                <option value="PASIVO">PASIVO — Sensor ultrasónico</option>
+                <option value="ACTIVO">ACTIVO — Sensor + Cámara IA</option>
+              </select>
             </div>
 
-            <!-- Panel camara -->
-            <div id="panel-cam">
-              <video id="cam-video" class="cam-video" autoplay playsinline muted></video>
-              <canvas id="cam-canvas" class="hidden"></canvas>
-              <div class="cam-controls">
-                <button id="btn-cam-start" class="btn-cam-action">▶ Iniciar camara</button>
-                <button id="btn-cam-stop" class="btn-cam-action danger hidden">⏹ Detener</button>
+            <div class="form-group">
+              <label for="sim-distancia">Distancia detectada: <span id="sim-distancia-val">45 cm</span></label>
+              <input type="range" id="sim-distancia" min="5" max="200" value="45" class="form-range" />
+            </div>
+
+            <!-- CÁMARA / IMAGEN (solo modo ACTIVO) -->
+            <div id="grupo-camara" class="hidden">
+              <div id="ia-status" style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem;text-align:center">⏳ Cargando modelo IA...</div>
+              <div class="img-source-tabs">
+                <button class="src-btn active" id="btn-src-cam">📷 Cámara en vivo</button>
+                <button class="src-btn" id="btn-src-file">📁 Subir foto</button>
               </div>
-              <div id="cam-status" class="cam-status">Camara inactiva</div>
+              <div id="panel-cam">
+                <video id="cam-video" class="cam-video" autoplay playsinline muted aria-label="Vista de cámara"></video>
+                <canvas id="cam-canvas" class="hidden" aria-hidden="true"></canvas>
+                <div class="cam-controls">
+                  <button id="btn-cam-start" class="btn-cam-action">▶ Iniciar cámara</button>
+                  <button id="btn-cam-stop" class="btn-cam-action danger hidden">⏹ Detener</button>
+                </div>
+                <div id="cam-status" class="cam-status">Cámara inactiva</div>
+              </div>
+              <div id="panel-file" class="hidden">
+                <input type="file" id="sim-imagen" accept="image/*" class="form-input" aria-label="Seleccionar imagen" />
+                <img id="sim-preview" class="sim-preview hidden" alt="Vista previa de la imagen seleccionada" />
+              </div>
             </div>
 
-            <!-- Panel archivo -->
-            <div id="panel-file" class="hidden">
-              <input type="file" id="sim-imagen" accept="image/*" class="form-input" />
-              <img id="sim-preview" class="sim-preview hidden" alt="Vista previa" />
+            <div class="sim-actions">
+              <button id="btn-sim-enviar" class="btn-primary">📡 Enviar evento</button>
+              <button id="btn-sim-auto" class="btn-secondary">⚡ Auto (5s)</button>
             </div>
+            <div id="sim-result" class="sim-result hidden" role="status" aria-live="polite"></div>
           </div>
+        </section>
 
-          <div class="sim-actions">
-            <button id="btn-sim-enviar" class="btn-primary">📡 Enviar evento</button>
-            <button id="btn-sim-auto" class="btn-secondary">⚡ Auto (5s)</button>
+      </div>
+
+      <section class="card table-card" aria-labelledby="h2-tabla">
+        <div class="card-header">
+          <h2 id="h2-tabla">📋 Historial de Eventos</h2>
+          <div class="table-filters">
+            <select id="filtro-modo" class="form-select sm" aria-label="Filtrar por modo">
+              <option value="">Todos los modos</option>
+              <option value="PASIVO">Pasivo</option>
+              <option value="ACTIVO">Activo</option>
+            </select>
+            <input type="search" id="filtro-buscar" class="form-input sm"
+                   placeholder="Buscar IA..." aria-label="Buscar por etiqueta IA" />
           </div>
-          <div id="sim-result" class="sim-result hidden"></div>
+        </div>
+        <div id="error-banner" class="error-banner hidden" role="alert" aria-live="polite"></div>
+        <div id="loading" class="loading" aria-live="polite" aria-busy="false">
+          <div class="spinner" aria-hidden="true"></div><span>Cargando eventos...</span>
+        </div>
+        <div class="table-wrapper">
+          <table class="eventos-table" aria-label="Historial de eventos del bastón">
+            <thead><tr>
+              <th scope="col">ID</th>
+              <th scope="col">Modo</th>
+              <th scope="col">Distancia</th>
+              <th scope="col">Análisis IA</th>
+              <th scope="col">Fecha / Hora</th>
+              <th scope="col">Voz</th>
+            </tr></thead>
+            <tbody id="eventos-tbody"></tbody>
+          </table>
+        </div>
+        <div id="empty-state" class="empty-state hidden" role="status">
+          <span aria-hidden="true">🦯</span><p>Sin eventos. Usa el simulador o conecta el hardware.</p>
+        </div>
+
+        <!-- Paginación -->
+        <div class="paginacion" role="navigation" aria-label="Paginación de eventos">
+          <button id="btn-pag-prev" class="btn-pag" aria-label="Página anterior" disabled>← Anterior</button>
+          <span id="pag-info" class="pag-info" aria-live="polite"></span>
+          <button id="btn-pag-next" class="btn-pag" aria-label="Página siguiente" disabled>Siguiente →</button>
+        </div>
+
+        <div class="table-footer">
+          <span id="table-count" class="table-count" aria-live="polite"></span>
         </div>
       </section>
 
-    </div>
+    </main>
+  </div><!-- /pantalla-dashboard -->
 
-    <section class="card table-card">
-      <div class="card-header">
-        <h2>📋 Historial de Eventos</h2>
-        <div class="table-filters">
-          <select id="filtro-modo" class="form-select sm">
-            <option value="">Todos los modos</option>
-            <option value="PASIVO">Pasivo</option>
-            <option value="ACTIVO">Activo</option>
-          </select>
-          <input type="text" id="filtro-buscar" class="form-input sm" placeholder="Buscar IA..." />
-        </div>
-      </div>
-      <div id="error-banner" class="error-banner hidden" role="alert" aria-live="polite"></div>
-      <div id="loading" class="loading" aria-live="polite">
-        <div class="spinner"></div><span>Cargando eventos...</span>
-      </div>
-      <div class="table-wrapper">
-        <table class="eventos-table">
-          <thead><tr>
-            <th>ID</th><th>Modo</th><th>Distancia</th><th>Analisis IA</th><th>Fecha / Hora</th><th>Voz</th>
-          </tr></thead>
-          <tbody id="eventos-tbody"></tbody>
-        </table>
-      </div>
-      <div id="empty-state" class="empty-state hidden">
-        <span>🦯</span><p>Sin eventos. Usa el simulador o conecta el hardware.</p>
-      </div>
-      <div class="table-footer"><span id="table-count" class="table-count"></span></div>
-    </section>
-
-  </main>
   <script src="app.js"></script>
 </body>
 </html>

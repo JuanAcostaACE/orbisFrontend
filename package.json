@@ -1,0 +1,12 @@
+{
+  "name": "orbis-frontend",
+  "version": "1.0.0",
+  "description": "ORBIS IoT Monitor - Frontend con TypeScript",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
