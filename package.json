@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "description": "ORBIS IoT Monitor - Frontend con TypeScript",
   "scripts": {
-    "build": "tsc",
-    "watch": "tsc --watch"
+    "build": "tsc && node scripts/minify.cjs",
+    "build:ts": "tsc",
+    "watch": "tsc --watch",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "terser": "^5.31.6"
   }
 }
