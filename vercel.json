@@ -1,5 +1,21 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npm install && npm run build",
   "outputDirectory": ".",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+
+
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://orbisbackend-production.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/auth/:path*",
+      "destination": "https://orbisbackend-production.up.railway.app/auth/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://orbisbackend-production.up.railway.app/health"
+    }
+  ]
 }
