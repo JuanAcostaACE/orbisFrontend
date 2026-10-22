@@ -55,9 +55,7 @@ interface MobileNetModel {
   ): Promise<Prediccion[]>;
 }
 
-declare const mobilenet: {
-  load(config?: { version?: number; alpha?: number }): Promise<MobileNetModel>;
-};
+import { gestorVision, type ResultadoInferencia } from './vision.js';
 
 declare const Chart: any;
 
@@ -96,13 +94,15 @@ let chart: any | null               = null;
 let chartType: 'bar' | 'line'       = 'bar';
 let autoInterval: number | null     = null;
 let autoRunning: boolean            = false;
-let mobilenetModel: MobileNetModel | null = null;
-let modeloCargando: boolean         = false;
 let streamActivo: MediaStream | null = null;
 let fuenteImagen: 'cam' | 'file'    = 'cam';
 let usuarioActual: AuthResponse | null = null;
 let sessionChecked: boolean         = false;
 const synth: SpeechSynthesis | null = window.speechSynthesis ?? null;
+
+// IA: última detección para deduplicación en simulador
+let ultimaDeteccionSimulador: string | null = null;
+let ultimoEnvioSimuladorTs = 0;
 
 // ----------------------------------------------------------------
 // FETCH HELPER — siempre con credentials:include para cookies
@@ -328,45 +328,62 @@ function iniciarDashboard(): void {
 }
 
 // ----------------------------------------------------------------
-// IA LOCAL (MobileNet)
+// IA CON COCO-SSD (primario) + MobileNet (fallback)
+// Gestionado por GestorVision en vision.ts
 // ----------------------------------------------------------------
-async function cargarModeloIA(): Promise<MobileNetModel> {
-  if (mobilenetModel) return mobilenetModel;
-  if (modeloCargando) {
-    while (modeloCargando) await new Promise<void>(r => setTimeout(r, 200));
-    return mobilenetModel!;
-  }
-  modeloCargando = true;
+async function cargarModeloIA(): Promise<void> {
   const statusEl = getElOrNull('ia-status');
   try {
-    if (statusEl) statusEl.textContent = 'Cargando modelo IA (~5MB)...';
-    mobilenetModel = await mobilenet.load({ version: 2, alpha: 1.0 });
-    if (statusEl) { statusEl.textContent = 'Modelo IA listo ✓'; (statusEl as HTMLElement).style.color = '#22c55e'; }
+    if (statusEl) statusEl.textContent = 'Cargando modelo IA (COCO-SSD, ~6MB)...';
+    const nombreCargado = await gestorVision.inicializarAsync();
+    if (statusEl) {
+      statusEl.textContent = `Modelo ${nombreCargado} listo ✓`;
+      (statusEl as HTMLElement).style.color = '#22c55e';
+    }
   } catch (e) {
-    if (statusEl) { statusEl.textContent = 'Error al cargar modelo IA'; (statusEl as HTMLElement).style.color = '#ef4444'; }
+    if (statusEl) {
+      statusEl.textContent = 'Error al cargar modelo IA';
+      (statusEl as HTMLElement).style.color = '#ef4444';
+    }
     throw e;
-  } finally { modeloCargando = false; }
-  return mobilenetModel!;
+  }
 }
 
-async function analizarConIA(dataUrl: string): Promise<string> {
-  const modelo = await cargarModeloIA();
-  const video  = getElOrNull('cam-video') as HTMLVideoElement | null;
-  let predicciones: Prediccion[];
-  if (fuenteImagen === 'cam' && streamActivo && video) {
-    predicciones = await modelo.classify(video, 3);
-  } else {
-    const img = new Image(); img.src = dataUrl;
-    await new Promise<void>(r => { img.onload = () => r(); });
-    predicciones = await modelo.classify(img, 3);
+async function analizarConIA(
+  dataUrl: string,
+  distanciaActual?: number
+): Promise<{ etiquetas: string; esDuplicado: boolean }> {
+  if (!gestorVision.listo()) {
+    await gestorVision.inicializarAsync();
   }
-  return predicciones
-    .map((p: Prediccion): string => {
-      let label = p.className ?? '';
-      if (label.includes(',')) label = label.split(',').pop()!.trim();
-      return label.charAt(0).toUpperCase() + label.slice(1);
-    })
-    .join(', ') || 'Objeto detectado';
+
+  const video = getElOrNull('cam-video') as HTMLVideoElement | null;
+  let elemento: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
+
+  if (fuenteImagen === 'cam' && streamActivo && video) {
+    elemento = video;
+  } else {
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise<void>(r => { img.onload = () => r(); });
+    elemento = img;
+  }
+
+  const resultado: ResultadoInferencia | null = await gestorVision.inferir(
+    elemento,
+    distanciaActual,
+    30   // umbral crítico de distancia: 30cm fuerza el envío aunque sea duplicado
+  );
+
+  if (!resultado) {
+    // Throttle activo o mutex — retornar último valor o vacío
+    return { etiquetas: '', esDuplicado: true };
+  }
+
+  return {
+    etiquetas:    resultado.etiquetasFormateadas,
+    esDuplicado:  resultado.esDuplicado
+  };
 }
 
 // ----------------------------------------------------------------
@@ -649,11 +666,19 @@ async function enviarSimulacion(): Promise<void> {
         if (fi?.files?.[0]) dataUrl = await imagenABase64(fi.files[0]);
       }
       if (dataUrl) {
-        simResult.textContent = 'Analizando con IA...';
-        try { etiquetasIA = await analizarConIA(dataUrl); }
-        catch (iaErr) { etiquetasIA = 'ERROR_IA: ' + (iaErr as Error).message; }
+        simResult.textContent = 'Analizando con IA (COCO-SSD)...';
+        try {
+          const { etiquetas, esDuplicado } = await analizarConIA(dataUrl, distancia);
+          if (esDuplicado) {
+            simResult.textContent = `Detección duplicada (cooldown 5s): ${etiquetas || 'sin etiquetas'} — evento no enviado`;
+            simResult.classList.add('info');
+            return;
+          }
+          etiquetasIA = etiquetas || null;
+        } catch (iaErr) { etiquetasIA = 'ERROR_IA: ' + (iaErr as Error).message; }
       }
     }
+
 
     const body: EventoRequest = { modo, distanciaCm: distancia, etiquetasIA };
     const res = await apiFetch(EP_EVENTOS, {
