@@ -55,21 +55,25 @@ interface MobileNetModel {
   ): Promise<Prediccion[]>;
 }
 
-import { gestorVision, type ResultadoInferencia } from './vision.js';
+import { gestorVision, type ResultadoInferencia, type Deteccion } from './vision.js';
+import { HisteresisPasiva, nivelDistancia, UMBRAL_CRITICO_CM } from './alertas.js';
 
 declare const Chart: any;
 
 // ----------------------------------------------------------------
 // CONSTANTES
 // ----------------------------------------------------------------
-const RAILWAY_URL = 'https://orbisbackend-production.up.railway.app';
-const API_BASE    = window.location.hostname === 'localhost'
-                    ? 'http://localhost:8080'
-                    : RAILWAY_URL;
-const EP_EVENTOS  = `${API_BASE}/api/v1/eventos`;
-const EP_AUTH     = `${API_BASE}/auth`;
-const REFRESH_MS  = 15000;
-const PAGE_SIZE   = 20;
+// En producción el frontend usa rutas relativas (/api, /auth): vercel.json las
+// reescribe hacia Railway, de modo que la cookie de sesión es de PRIMERA parte
+// (mismo origen) y no la bloquean las políticas de cookies de terceros.
+// En local se apunta directamente al backend de desarrollo.
+const IS_LOCAL     = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const API_BASE     = IS_LOCAL ? 'http://localhost:8080' : '';
+const EP_EVENTOS   = `${API_BASE}/api/v1/eventos`;
+const EP_AUTH      = `${API_BASE}/auth`;
+const REFRESH_MS   = 15000;
+const PAGE_SIZE    = 20;
+const OVERLAY_TTL_MS = 6000;   // tiempo que permanecen visibles las cajas dibujadas
 
 // ----------------------------------------------------------------
 // HELPERS DOM
@@ -103,6 +107,21 @@ const synth: SpeechSynthesis | null = window.speechSynthesis ?? null;
 // IA: última detección para deduplicación en simulador
 let ultimaDeteccionSimulador: string | null = null;
 let ultimoEnvioSimuladorTs = 0;
+
+// Anti-saturación PASIVO (histéresis 100/115 cm + cooldown 5 s) — ver alertas.ts
+const histeresis = new HisteresisPasiva();
+let envioEnCurso = false;
+
+// Polling del dashboard
+let pollTimer: number | null = null;
+let pollPausado = false;
+let cargaEnCurso = false;
+let ultimaFirma = '';
+let dashboardListo = false;   // los listeners se registran UNA sola vez (re-login no los duplica)
+
+// Overlay de bounding boxes
+let overlayTimer: number | null = null;
+let audioCtx: AudioContext | null = null;
 
 // ----------------------------------------------------------------
 // FETCH HELPER — siempre con credentials:include para cookies
@@ -173,6 +192,11 @@ async function logout(): Promise<void> {
 // ----------------------------------------------------------------
 
 function mostrarPantallaAuth(): void {
+  detenerPolling();
+  detenerCamara();
+  histeresis.reiniciar();
+  limpiarPeligro();
+  ultimaFirma = '';
   getEl('pantalla-auth').classList.remove('hidden');
   getEl('pantalla-dashboard').classList.add('hidden');
   limpiarFormAuth();
@@ -271,27 +295,30 @@ document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
 
 function iniciarDashboard(): void {
   paginaActual = 0;
-  cargarEventos();
+  ultimaFirma = '';
+  void cargarEventos({ forzar: true });
+  iniciarPolling();
+  refrescarEstado();
 
-  // Auto-refresh: solo si no hay sesión expirada
-  window.setInterval(async () => {
-    const sigueActivo = await verificarSesion();
-    if (!sigueActivo) { mostrarPantallaAuth(); return; }
-    cargarEventos();
-  }, REFRESH_MS);
+  if (dashboardListo) return;
+  dashboardListo = true;
 
   cargarModeloIA().catch(() => {});
 
-  getEl('btn-refresh').addEventListener('click', () => { paginaActual = 0; cargarEventos(); });
+  getEl('btn-refresh').addEventListener('click', () => { paginaActual = 0; void cargarEventos({ forzar: true }); });
+  getEl('btn-poll-toggle').addEventListener('click', togglePolling);
   getEl('btn-chart-bar').addEventListener('click', () => cambiarChart('bar'));
   getEl('btn-chart-line').addEventListener('click', () => cambiarChart('line'));
 
   (getEl('sim-distancia') as HTMLInputElement).addEventListener('input', function(): void {
+    const valor = parseFloat((this as HTMLInputElement).value);
     const lbl = getElOrNull('sim-distancia-val');
-    if (lbl) lbl.textContent = `${(this as HTMLInputElement).value} cm`;
+    if (lbl) lbl.textContent = `${valor} cm`;
+    // Alerta local inmediata (sin red). El POST solo ocurre al ENTRAR en peligro y fuera de cooldown.
+    procesarDistanciaSimulador(valor, true);
   });
 
-  getEl('btn-sim-enviar').addEventListener('click', enviarSimulacion);
+  getEl('btn-sim-enviar').addEventListener('click', () => { void enviarSimulacion(); });
   getEl('btn-sim-auto').addEventListener('click', toggleAuto);
 
   const filtroModo   = getEl('filtro-modo')   as HTMLSelectElement;
@@ -352,7 +379,7 @@ async function cargarModeloIA(): Promise<void> {
 async function analizarConIA(
   dataUrl: string,
   distanciaActual?: number
-): Promise<{ etiquetas: string; esDuplicado: boolean }> {
+): Promise<{ etiquetas: string; esDuplicado: boolean; detecciones: Deteccion[] }> {
   if (!gestorVision.listo()) {
     await gestorVision.inicializarAsync();
   }
@@ -372,18 +399,75 @@ async function analizarConIA(
   const resultado: ResultadoInferencia | null = await gestorVision.inferir(
     elemento,
     distanciaActual,
-    30   // umbral crítico de distancia: 30cm fuerza el envío aunque sea duplicado
+    UMBRAL_CRITICO_CM   // distancia crítica: fuerza el envío aunque sea duplicado
   );
 
   if (!resultado) {
-    // Throttle activo o mutex — retornar último valor o vacío
-    return { etiquetas: '', esDuplicado: true };
+    // Throttle activo o mutex — retornar vacío
+    return { etiquetas: '', esDuplicado: true, detecciones: [] };
   }
+
+  // Bounding boxes solo sobre el video en vivo (coordenadas del frame del video)
+  if (elemento === video) dibujarDetecciones(resultado.detecciones);
 
   return {
     etiquetas:    resultado.etiquetasFormateadas,
-    esDuplicado:  resultado.esDuplicado
+    esDuplicado:  resultado.esDuplicado,
+    detecciones:  resultado.detecciones
   };
+}
+
+// ----------------------------------------------------------------
+// OVERLAY DE BOUNDING BOXES (COCO-SSD) sobre el video
+// ----------------------------------------------------------------
+function limpiarOverlay(): void {
+  if (overlayTimer !== null) { clearTimeout(overlayTimer); overlayTimer = null; }
+  const canvas = getElOrNull('cam-overlay') as HTMLCanvasElement | null;
+  if (!canvas) return;
+  canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function dibujarDetecciones(dets: Deteccion[]): void {
+  const video  = getElOrNull('cam-video')   as HTMLVideoElement  | null;
+  const canvas = getElOrNull('cam-overlay') as HTMLCanvasElement | null;
+  if (!video || !canvas || !streamActivo) return;
+  const cw = video.clientWidth, ch = video.clientHeight;
+  const vw = video.videoWidth,  vh = video.videoHeight;
+  if (!cw || !ch || !vw || !vh) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = Math.round(cw * dpr);
+  canvas.height = Math.round(ch * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+
+  // El video usa object-fit: contain -> escala uniforme + márgenes
+  const escala = Math.min(cw / vw, ch / vh);
+  const offX = (cw - vw * escala) / 2;
+  const offY = (ch - vh * escala) / 2;
+
+  ctx.lineWidth = 3;
+  ctx.font = 'bold 13px Inter, sans-serif';
+  ctx.textBaseline = 'top';
+  dets.forEach(d => {
+    if (!d.bbox) return;
+    const [x, y, w, h] = d.bbox;
+    const rx = offX + x * escala, ry = offY + y * escala;
+    ctx.strokeStyle = '#fde047';
+    ctx.strokeRect(rx, ry, w * escala, h * escala);
+    const etiqueta = `${d.clase} ${Math.round(d.confianza * 100)}%`;
+    const tw = ctx.measureText(etiqueta).width + 8;
+    const ty = Math.max(0, ry - 18);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(rx, ty, tw, 18);
+    ctx.fillStyle = '#fde047';
+    ctx.fillText(etiqueta, rx + 4, ty + 2);
+  });
+
+  if (overlayTimer !== null) clearTimeout(overlayTimer);
+  overlayTimer = window.setTimeout(limpiarOverlay, OVERLAY_TTL_MS);
 }
 
 // ----------------------------------------------------------------
@@ -418,6 +502,7 @@ async function iniciarCamara(): Promise<void> {
 function detenerCamara(): void {
   streamActivo?.getTracks().forEach(t => t.stop());
   streamActivo = null;
+  limpiarOverlay();
   const video = getElOrNull('cam-video') as HTMLVideoElement | null;
   if (video) video.srcObject = null;
   getElOrNull('btn-cam-start')?.classList.remove('hidden');
@@ -440,9 +525,18 @@ function capturarFrame(): string | null {
 // ----------------------------------------------------------------
 // FETCH — CARGAR EVENTOS (paginado)
 // ----------------------------------------------------------------
-async function cargarEventos(): Promise<void> {
-  mostrarCargando(true);
-  ocultarError();
+interface OpcionesCarga { silencioso?: boolean; forzar?: boolean }
+
+/** Huella de la página para detectar si hubo cambios reales desde el último poll. */
+function firmarPagina(p: PaginaResponse): string {
+  return `${p.paginaActual}|${p.totalPaginas}|${p.totalElementos}|` +
+    p.contenido.map(e => `${e.id}:${e.modo}:${e.distanciaCm}:${e.etiquetasIA ?? ''}:${e.fechaHora ?? ''}`).join(';');
+}
+
+async function cargarEventos(opts: OpcionesCarga = {}): Promise<void> {
+  if (cargaEnCurso) return;           // nunca dos cargas simultáneas
+  cargaEnCurso = true;
+  if (!opts.silencioso) mostrarCargando(true);
   try {
     const res = await apiFetch(`${EP_EVENTOS}?page=${paginaActual}&size=${PAGE_SIZE}`);
 
@@ -455,6 +549,14 @@ async function cargarEventos(): Promise<void> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const pagina = await res.json() as PaginaResponse;
+    ocultarError();
+    refrescarEstado();
+
+    // Sin cambios -> no reconstruir tabla ni gráfica (evita parpadeo y trabajo inútil)
+    const firma = firmarPagina(pagina);
+    if (!opts.forzar && firma === ultimaFirma) return;
+    ultimaFirma = firma;
+
     todosEventos   = pagina.contenido;
     totalPaginas   = pagina.totalPaginas;
     totalEventos   = pagina.totalElementos;
@@ -467,8 +569,107 @@ async function cargarEventos(): Promise<void> {
 
   } catch (e) {
     mostrarError(`Sin conexión: ${(e as Error).message}`);
+    refrescarEstado('sin conexión con el servidor');
   } finally {
+    cargaEnCurso = false;
     mostrarCargando(false);
+  }
+}
+
+// ----------------------------------------------------------------
+// POLLING pausable
+// ----------------------------------------------------------------
+function iniciarPolling(): void {
+  detenerPolling();
+  if (pollPausado) return;
+  pollTimer = window.setInterval(() => {
+    if (document.hidden) return;      // pestaña oculta: no consultar
+    void cargarEventos({ silencioso: true });
+  }, REFRESH_MS);
+}
+
+function detenerPolling(): void {
+  if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function togglePolling(): void {
+  pollPausado = !pollPausado;
+  const btn = getEl('btn-poll-toggle');
+  btn.setAttribute('aria-pressed', String(pollPausado));
+  btn.textContent = pollPausado
+    ? '▶ Reanudar actualización automática'
+    : '⏸ Pausar actualización automática';
+  if (pollPausado) {
+    detenerPolling();
+  } else {
+    iniciarPolling();
+    void cargarEventos({ silencioso: true });
+  }
+  refrescarEstado();
+}
+
+/** Actualiza el estado anunciado (aria-live polite) solo si el texto cambió. */
+function refrescarEstado(extra = ''): void {
+  const el = getElOrNull('estado-sistema');
+  if (!el) return;
+  const base = `Sistema operativo · Actualización automática ${pollPausado ? 'en pausa' : `activa (cada ${REFRESH_MS / 1000} s)`}`;
+  const texto = extra ? `${base} · ${extra}` : base;
+  if (el.textContent !== texto) el.textContent = texto;
+}
+
+// ----------------------------------------------------------------
+// ALERTA LOCAL (visual + sonora + vibración) — sin depender de la red
+// ----------------------------------------------------------------
+function beepLocal(): void {
+  try {
+    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (AC) {
+      audioCtx = audioCtx ?? new AC();
+      const osc  = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.08;
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.25);
+    }
+  } catch { /* audio no disponible hasta que haya gesto del usuario */ }
+  try { navigator.vibrate?.(200); } catch { /* sin vibración */ }
+}
+
+function anunciarPeligro(distancia: number): void {
+  const el = getElOrNull('alerta-peligro');
+  const nivel = nivelDistancia(distancia);
+  if (el) {
+    el.textContent = nivel === 'CRITICO'
+      ? `⛔ PELIGRO CRÍTICO: obstáculo a ${distancia} cm`
+      : `⚠ PELIGRO: obstáculo a ${distancia} cm`;
+  }
+  beepLocal();
+}
+
+function limpiarPeligro(): void {
+  const el = getElOrNull('alerta-peligro');
+  if (el) el.textContent = '';
+}
+
+/**
+ * Procesa una lectura del slider del simulador.
+ *  - La alerta local reacciona al instante (histéresis 100/115 cm).
+ *  - En modo PASIVO se envía UN solo POST al entrar en peligro y solo si pasó el cooldown.
+ *    Mover el slider dentro de la zona de peligro NO genera peticiones.
+ */
+function procesarDistanciaSimulador(distancia: number, permitirEnvio: boolean): void {
+  const r = histeresis.evaluar(distancia);
+  if (r.entroEnPeligro) anunciarPeligro(distancia);
+  if (r.salioDePeligro) limpiarPeligro();
+  if (!r.entroEnPeligro || !permitirEnvio) return;
+
+  const modo = (getElOrNull('sim-modo') as HTMLSelectElement | null)?.value;
+  if (modo === 'PASIVO' && histeresis.puedeEnviar(Date.now())) {
+    void enviarSimulacion();
   }
 }
 
@@ -549,11 +750,26 @@ function renderTabla(): void {
     const badge  = document.createElement('span');
     badge.className = 'badge-modo';
     badge.setAttribute('data-modo', (e.modo ?? '').toUpperCase());
-    badge.textContent = e.modo ?? '--';
+    const iconoModo = (e.modo ?? '').toUpperCase() === 'ACTIVO' ? '📷' : '📡';
+    badge.textContent = `${iconoModo} ${e.modo ?? '--'}`;
     tdModo.appendChild(badge);
     tr.appendChild(tdModo);
 
-    tr.appendChild(tdText(e.distanciaCm != null ? `${e.distanciaCm.toFixed(1)} cm` : '--', 'td-dist'));
+    // Distancia + nivel con icono y texto explícito (no depende solo del color)
+    const tdDist = document.createElement('td');
+    tdDist.className = 'td-dist';
+    if (e.distanciaCm != null) {
+      tdDist.appendChild(document.createTextNode(`${e.distanciaCm.toFixed(1)} cm`));
+      const nivel = nivelDistancia(e.distanciaCm);
+      const nb = document.createElement('span');
+      nb.className = 'badge-dist';
+      nb.setAttribute('data-nivel', nivel);
+      nb.textContent = nivel === 'CRITICO' ? '⛔ CRÍTICO' : nivel === 'PELIGRO' ? '⚠ PELIGRO' : '✔ SEGURO';
+      tdDist.appendChild(nb);
+    } else {
+      tdDist.textContent = '--';
+    }
+    tr.appendChild(tdDist);
     tr.appendChild(tdText(e.etiquetasIA ?? '--', 'td-ia'));
     tr.appendChild(tdText(formatFecha(e.fechaHora), 'td-fecha'));
 
@@ -564,6 +780,7 @@ function renderTabla(): void {
     if (tieneIA && e.etiquetasIA) {
       const btn = document.createElement('button');
       btn.className = 'btn-voz'; btn.textContent = '🔊';
+      btn.setAttribute('aria-label', 'Leer etiquetas en voz alta');
       const textoVoz = e.etiquetasIA;
       btn.addEventListener('click', () => leerVoz(textoVoz, btn));
       tdVoz.appendChild(btn);
@@ -642,11 +859,27 @@ function imagenABase64(file: File): Promise<string> {
   });
 }
 
-async function enviarSimulacion(): Promise<void> {
+interface OpcionesEnvio { ignorarCooldown?: boolean }
+
+async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
   const modo      = (getEl('sim-modo')      as HTMLSelectElement).value;
   const distancia = parseFloat((getEl('sim-distancia') as HTMLInputElement).value);
   const btn       = getEl('btn-sim-enviar') as HTMLButtonElement;
   const simResult = getEl('sim-result');
+
+  // Anti-saturación: nunca dos envíos simultáneos, y en PASIVO respeta el cooldown.
+  // La alerta local ya se disparó antes y no depende de este envío.
+  if (envioEnCurso) return;
+  if (modo === 'PASIVO' && !opts.ignorarCooldown) {
+    const restante = histeresis.restanteMs(Date.now());
+    if (restante > 0) {
+      simResult.className = 'sim-result info';
+      simResult.textContent = `Cooldown activo: espera ${Math.ceil(restante / 1000)} s para enviar otro evento PASIVO (la alerta local sigue funcionando).`;
+      return;
+    }
+  }
+  envioEnCurso = true;
+  if (modo === 'PASIVO') histeresis.registrarEnvio(Date.now());
 
   btn.disabled = true; btn.textContent = 'Procesando...';
   simResult.className = 'sim-result';
@@ -704,6 +937,7 @@ async function enviarSimulacion(): Promise<void> {
     simResult.classList.add('error');
     simResult.textContent = 'Error: ' + (e as Error).message;
   } finally {
+    envioEnCurso = false;
     btn.disabled = false; btn.textContent = 'Enviar evento';
   }
 }
@@ -715,7 +949,7 @@ function toggleAuto(): void {
     autoRunning = false; btn.textContent = 'Auto (5s)'; btn.classList.remove('btn-danger');
   } else {
     autoRunning = true; btn.textContent = 'Detener auto'; btn.classList.add('btn-danger');
-    void enviarSimulacion();
+    void enviarSimulacion({ ignorarCooldown: true });
     autoInterval = window.setInterval(() => {
       const modos = ['PASIVO', 'ACTIVO'];
       const sel = getEl('sim-modo') as HTMLSelectElement;
@@ -724,7 +958,8 @@ function toggleAuto(): void {
       (getEl('sim-distancia') as HTMLInputElement).value = String(d);
       const lbl = getElOrNull('sim-distancia-val');
       if (lbl) lbl.textContent = d + ' cm';
-      void enviarSimulacion();
+      procesarDistanciaSimulador(d, false);   // alerta local; el envío lo hace el propio intervalo (5 s)
+      void enviarSimulacion({ ignorarCooldown: true });
     }, 5000);
   }
 }
