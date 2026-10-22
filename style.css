@@ -180,3 +180,65 @@ body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--tex
 .btn-pag:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
 .btn-pag:disabled { opacity: 0.4; cursor: not-allowed; }
 .pag-info { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+
+/* ================================================================
+   FASE 4 - Accesibilidad y UI asistiva
+   ================================================================ */
+
+/* Foco visible de alto contraste (teclado). Doble anillo: amarillo + negro */
+:focus-visible {
+  outline: 3px solid #fde047 !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px #000;
+  border-radius: 4px;
+}
+.form-select:focus-visible, .form-input:focus-visible { border-color: #fde047; }
+
+/* Texto solo para lectores de pantalla */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* Barra de estado del sistema */
+.estado-sistema {
+  display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center;
+  padding: 0.5rem 1rem; margin-bottom: 1rem; font-size: 0.8rem;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text);
+}
+.btn-poll {
+  background: var(--bg3); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px 12px; cursor: pointer; font-size: 0.78rem; font-family: inherit;
+}
+.btn-poll[aria-pressed="true"] { border-color: #fbbf24; color: #fbbf24; font-weight: 700; }
+
+/* Alerta de peligro: icono + texto + borde grueso (no solo color) */
+.alerta-peligro {
+  margin-bottom: 1rem; padding: 0.75rem 1rem; border-radius: 8px;
+  border: 3px solid #ef4444; background: rgba(239,68,68,0.15);
+  color: #fff; font-weight: 700; font-size: 0.95rem;
+}
+.alerta-peligro:empty { display: none; }
+
+/* Insignias de nivel de distancia: icono + etiqueta textual + patron de borde */
+.badge-dist {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em; border: 2px solid currentColor;
+}
+.badge-dist[data-nivel="SEGURO"]  { color: #4ade80; border-style: solid; }
+.badge-dist[data-nivel="PELIGRO"] { color: #fbbf24; border-style: dashed; }
+.badge-dist[data-nivel="CRITICO"] { color: #f87171; border-style: double; border-width: 4px; }
+.badge-modo { border: 1px solid currentColor; }
+
+/* Overlay de bounding boxes sobre el video */
+.cam-wrap { position: relative; }
+.cam-overlay {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+.cam-wrap .cam-video { object-fit: contain; }
