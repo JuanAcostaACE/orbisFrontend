@@ -1,4 +1,4 @@
-﻿# Orbis Frontend
+# Orbis Frontend
 
 Panel de monitoreo web para **Orbis** — sistema de tecnologia asistiva IoT para personas con discapacidad visual (bastón inteligente con IA).
 
@@ -116,3 +116,11 @@ orbisFrontend/
 |---|---|
 | [orbisFrontend](https://github.com/JuanAcostaACE/orbisFrontend) | Este repositorio — Panel web |
 | [orbisBackend](https://github.com/JuanAcostaACE/orbisBackend) | API REST Java/Spring Boot |
+
+---
+
+## Integrantes
+
+- Juan David Acosta Urbano
+- Matias Castaño Raigoza
+- Valentina Artega Realpe
