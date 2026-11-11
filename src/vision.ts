@@ -159,16 +159,28 @@ export interface VisionConfig {
   cooldownDeduplicacionMs: number;
 }
 
-/** Resultado de una inferencia gestionada. */
-export interface ResultadoInferencia {
-  detecciones: Deteccion[];
-  /** Etiquetas formateadas listas para enviar al backend como etiquetasIA. */
-  etiquetasFormateadas: string;
-  /** True si esta detección es un duplicado dentro del cooldown. */
-  esDuplicado: boolean;
-  /** Nombre del proveedor que realizó la inferencia. */
-  proveedor: string;
-}
+/** Motivo por el que una inferencia NO se ejecutó. */
+export type MotivoOmision = 'ocupado' | 'throttle' | 'no_listo';
+
+/**
+ * Resultado de una inferencia gestionada. Los tres casos son distintos:
+ *  - omitida: no se ejecutó (mutex, intervalo mínimo o modelo no listo)
+ *  - sin_deteccion: se ejecutó, pero ningún objeto superó MIN_CONFIDENCE
+ *  - ok: hay detecciones válidas; esDuplicado indica si entran en cooldown
+ */
+export type ResultadoInferencia =
+  | { estado: 'omitida'; motivo: MotivoOmision }
+  | { estado: 'sin_deteccion' }
+  | {
+      estado: 'ok';
+      detecciones: Deteccion[];
+      /** Etiquetas formateadas listas para enviar al backend como etiquetasIA. */
+      etiquetasFormateadas: string;
+      /** True si esta detección es un duplicado dentro del cooldown. */
+      esDuplicado: boolean;
+      /** Nombre del proveedor que realizó la inferencia. */
+      proveedor: string;
+    };
 
 const CONFIG_DEFAULT: VisionConfig = {
   minInferenceMs:           1200,
@@ -216,30 +228,30 @@ export class GestorVision {
   }
 
   listo(): boolean { return this.proveedor.listo(); }
-  nombreProveedor(): string { return this.proveedor.nombre; }
 
   /**
    * Ejecuta inferencia con control de saturación y deduplicación.
    *
-   * Retorna null si:
+   * Devuelve estado 'omitida' si:
    *  - Ya hay una inferencia en curso (mutex)
-   *  - No ha pasado el intervalo mínimo
+   *  - No ha pasado el intervalo mínimo (throttle)
    *  - El proveedor no está listo
+   * Devuelve 'sin_deteccion' si la inferencia se ejecutó sin resultados válidos.
    */
   async inferir(
     elemento: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
     distanciaActual?: number,
     umbralCriticoCm = 30
-  ): Promise<ResultadoInferencia | null> {
+  ): Promise<ResultadoInferencia> {
     // ── Mutex: evitar llamadas paralelas ──
-    if (this.inferenciaEnCurso) return null;
+    if (this.inferenciaEnCurso) return { estado: 'omitida', motivo: 'ocupado' };
 
     // ── Throttle: intervalo mínimo ──
     const ahora = performance.now();
-    if (ahora - this.ultimaInferenciaTs < this.config.minInferenceMs) return null;
+    if (ahora - this.ultimaInferenciaTs < this.config.minInferenceMs) return { estado: 'omitida', motivo: 'throttle' };
 
     // ── Proveedor no listo ──
-    if (!this.proveedor.listo()) return null;
+    if (!this.proveedor.listo()) return { estado: 'omitida', motivo: 'no_listo' };
 
     this.inferenciaEnCurso = true;
     this.ultimaInferenciaTs = ahora;
@@ -252,7 +264,7 @@ export class GestorVision {
         .filter(d => d.confianza >= this.config.minConfianza)
         .sort((a, b) => b.confianza - a.confianza);
 
-      if (validas.length === 0) return null;
+      if (validas.length === 0) return { estado: 'sin_deteccion' };
 
       const clasePrincipal = validas[0].clase;
       const etiquetas      = validas.map(d =>
@@ -275,6 +287,7 @@ export class GestorVision {
       }
 
       return {
+        estado: 'ok',
         detecciones: validas,
         etiquetasFormateadas: etiquetas,
         esDuplicado,
@@ -284,12 +297,6 @@ export class GestorVision {
     } finally {
       this.inferenciaEnCurso = false;
     }
-  }
-
-  /** Libera los recursos del modelo (llamar al destruir el componente). */
-  liberar(): void {
-    this.proveedor.liberar();
-    this.fallback?.liberar();
   }
 }
 
