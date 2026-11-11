@@ -74,10 +74,6 @@ export class HisteresisPasiva {
     this.ultimoEnvioTs = ahoraMs;
   }
 
-  estaEnPeligro(): boolean {
-    return this.enPeligro;
-  }
-
   reiniciar(): void {
     this.enPeligro = false;
     this.ultimoEnvioTs = Number.NEGATIVE_INFINITY;

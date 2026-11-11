@@ -17,9 +17,6 @@ interface EventoResponse {
   obstaculoNivel?: string | null;
 }
 
-/** Alias de compatibilidad (algunos paths internos aún usan RegistroEvento) */
-type RegistroEvento = EventoResponse;
-
 interface EventoRequest {
   modo: string;
   distanciaCm: number;
@@ -41,18 +38,6 @@ interface AuthResponse {
   nombre?: string;
   correo: string;
   mensaje?: string;
-}
-
-interface Prediccion {
-  className: string;
-  probability: number;
-}
-
-interface MobileNetModel {
-  classify(
-    img: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
-    topk?: number
-  ): Promise<Prediccion[]>;
 }
 
 import { gestorVision, type ResultadoInferencia, type Deteccion } from './vision.js';
@@ -101,12 +86,7 @@ let autoRunning: boolean            = false;
 let streamActivo: MediaStream | null = null;
 let fuenteImagen: 'cam' | 'file'    = 'cam';
 let usuarioActual: AuthResponse | null = null;
-let sessionChecked: boolean         = false;
 const synth: SpeechSynthesis | null = window.speechSynthesis ?? null;
-
-// IA: última detección para deduplicación en simulador
-let ultimaDeteccionSimulador: string | null = null;
-let ultimoEnvioSimuladorTs = 0;
 
 // Anti-saturación PASIVO (histéresis 100/115 cm + cooldown 5 s) — ver alertas.ts
 const histeresis = new HisteresisPasiva();
@@ -193,6 +173,7 @@ async function logout(): Promise<void> {
 
 function mostrarPantallaAuth(): void {
   detenerPolling();
+  detenerAuto();          // ninguna sesión termina con envíos automáticos en marcha
   detenerCamara();
   histeresis.reiniciar();
   limpiarPeligro();
@@ -238,7 +219,6 @@ function mostrarTabAuth(tab: 'login' | 'registro'): void {
 document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
   // 1. Verificar sesión existente antes de mostrar cualquier UI
   const haySession = await verificarSesion();
-  sessionChecked = true;
 
   if (haySession) {
     mostrarDashboard();
@@ -251,47 +231,58 @@ document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
   getEl('tab-login').addEventListener('click', () => mostrarTabAuth('login'));
   getEl('tab-registro').addEventListener('click', () => mostrarTabAuth('registro'));
 
-  getEl('btn-login').addEventListener('click', async () => {
-    const correo = (getElOrNull('login-correo') as HTMLInputElement)?.value.trim() ?? '';
-    const pass   = (getElOrNull('login-pass')   as HTMLInputElement)?.value ?? '';
-    if (!correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
-    const btn = getEl('btn-login') as HTMLButtonElement;
-    btn.disabled = true;
-    btn.textContent = 'Iniciando...';
-    try {
-      await login(correo, pass);
-      mostrarDashboard();
-      iniciarDashboard();
-    } catch (e) {
-      mostrarMsgAuth((e as Error).message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Iniciar sesión';
-    }
+  // Formularios reales: Enter y el botón submit disparan el mismo handler
+  getEl('form-login').addEventListener('submit', (e: Event): void => {
+    e.preventDefault();
+    void enviarLogin();
   });
 
-  getEl('btn-registro').addEventListener('click', async () => {
-    const nombre  = (getElOrNull('reg-nombre') as HTMLInputElement)?.value.trim() ?? '';
-    const correo  = (getElOrNull('reg-correo') as HTMLInputElement)?.value.trim() ?? '';
-    const pass    = (getElOrNull('reg-pass')   as HTMLInputElement)?.value ?? '';
-    if (!nombre || !correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
-    const btn = getEl('btn-registro') as HTMLButtonElement;
-    btn.disabled = true;
-    btn.textContent = 'Registrando...';
-    try {
-      await registro(nombre, correo, pass);
-      mostrarMsgAuth('Cuenta creada. Ahora inicia sesión.', false);
-      mostrarTabAuth('login');
-    } catch (e) {
-      mostrarMsgAuth((e as Error).message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Crear cuenta';
-    }
+  getEl('form-registro').addEventListener('submit', (e: Event): void => {
+    e.preventDefault();
+    void enviarRegistro();
   });
 
   getElOrNull('btn-logout')?.addEventListener('click', logout);
 });
+
+async function enviarLogin(): Promise<void> {
+  const correo = (getElOrNull('login-correo') as HTMLInputElement)?.value.trim() ?? '';
+  const pass   = (getElOrNull('login-pass')   as HTMLInputElement)?.value ?? '';
+  if (!correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
+  const btn = getEl('btn-login') as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = 'Iniciando...';
+  try {
+    await login(correo, pass);
+    mostrarDashboard();
+    iniciarDashboard();
+  } catch (e) {
+    mostrarMsgAuth((e as Error).message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Iniciar sesión';
+  }
+}
+
+async function enviarRegistro(): Promise<void> {
+  const nombre  = (getElOrNull('reg-nombre') as HTMLInputElement)?.value.trim() ?? '';
+  const correo  = (getElOrNull('reg-correo') as HTMLInputElement)?.value.trim() ?? '';
+  const pass    = (getElOrNull('reg-pass')   as HTMLInputElement)?.value ?? '';
+  if (!nombre || !correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
+  const btn = getEl('btn-registro') as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = 'Registrando...';
+  try {
+    await registro(nombre, correo, pass);
+    mostrarMsgAuth('Cuenta creada. Ahora inicia sesión.', false);
+    mostrarTabAuth('login');
+  } catch (e) {
+    mostrarMsgAuth((e as Error).message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crear cuenta';
+  }
+}
 
 function iniciarDashboard(): void {
   paginaActual = 0;
@@ -379,7 +370,7 @@ async function cargarModeloIA(): Promise<void> {
 async function analizarConIA(
   dataUrl: string,
   distanciaActual?: number
-): Promise<{ etiquetas: string; esDuplicado: boolean; detecciones: Deteccion[] }> {
+): Promise<ResultadoInferencia> {
   if (!gestorVision.listo()) {
     await gestorVision.inicializarAsync();
   }
@@ -396,25 +387,30 @@ async function analizarConIA(
     elemento = img;
   }
 
-  const resultado: ResultadoInferencia | null = await gestorVision.inferir(
+  const resultado: ResultadoInferencia = await gestorVision.inferir(
     elemento,
     distanciaActual,
     UMBRAL_CRITICO_CM   // distancia crítica: fuerza el envío aunque sea duplicado
   );
 
-  if (!resultado) {
-    // Throttle activo o mutex — retornar vacío
-    return { etiquetas: '', esDuplicado: true, detecciones: [] };
-  }
-
   // Bounding boxes solo sobre el video en vivo (coordenadas del frame del video)
-  if (elemento === video) dibujarDetecciones(resultado.detecciones);
+  if (resultado.estado === 'ok' && elemento === video) dibujarDetecciones(resultado.detecciones);
 
-  return {
-    etiquetas:    resultado.etiquetasFormateadas,
-    esDuplicado:  resultado.esDuplicado,
-    detecciones:  resultado.detecciones
-  };
+  return resultado;
+}
+
+/** Mensaje de estado para un análisis que no produjo evento (nunca se envía vacío). */
+function mensajeSinEvento(r: ResultadoInferencia): string | null {
+  switch (r.estado) {
+    case 'omitida':
+      if (r.motivo === 'throttle') return 'Análisis omitido: espera ~1,2 s entre detecciones. Evento no enviado.';
+      if (r.motivo === 'ocupado')  return 'Hay un análisis de IA en curso. Evento no enviado.';
+      return 'El modelo de IA aún no está listo. Evento no enviado.';
+    case 'sin_deteccion':
+      return 'La IA no detectó objetos con confianza suficiente (≥ 55 %). Evento no enviado.';
+    case 'ok':
+      return r.esDuplicado ? `Detección duplicada (cooldown 5s): ${r.etiquetasFormateadas || 'sin etiquetas'} — evento no enviado` : null;
+  }
 }
 
 // ----------------------------------------------------------------
@@ -901,13 +897,15 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
       if (dataUrl) {
         simResult.textContent = 'Analizando con IA (COCO-SSD)...';
         try {
-          const { etiquetas, esDuplicado } = await analizarConIA(dataUrl, distancia);
-          if (esDuplicado) {
-            simResult.textContent = `Detección duplicada (cooldown 5s): ${etiquetas || 'sin etiquetas'} — evento no enviado`;
+          const analisis = await analizarConIA(dataUrl, distancia);
+          const aviso = mensajeSinEvento(analisis);
+          if (aviso !== null) {
+            // Sin detección válida, duplicado u omitido: no se envía evento vacío al backend
+            simResult.textContent = aviso;
             simResult.classList.add('info');
             return;
           }
-          etiquetasIA = etiquetas || null;
+          if (analisis.estado === 'ok') etiquetasIA = analisis.etiquetasFormateadas || null;
         } catch (iaErr) { etiquetasIA = 'ERROR_IA: ' + (iaErr as Error).message; }
       }
     }
@@ -942,11 +940,19 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
   }
 }
 
+/** Detiene el envío automático y restaura el botón. Seguro de llamar aunque no esté activo. */
+function detenerAuto(): void {
+  if (autoInterval !== null) { clearInterval(autoInterval); autoInterval = null; }
+  if (!autoRunning) return;
+  autoRunning = false;
+  const btn = getElOrNull('btn-sim-auto');
+  if (btn) { btn.textContent = 'Auto (5s)'; btn.classList.remove('btn-danger'); }
+}
+
 function toggleAuto(): void {
   const btn = getEl('btn-sim-auto');
   if (autoRunning) {
-    if (autoInterval !== null) clearInterval(autoInterval);
-    autoRunning = false; btn.textContent = 'Auto (5s)'; btn.classList.remove('btn-danger');
+    detenerAuto();
   } else {
     autoRunning = true; btn.textContent = 'Detener auto'; btn.classList.add('btn-danger');
     void enviarSimulacion({ ignorarCooldown: true });
