@@ -8,6 +8,7 @@
   --bg:        #0a0f1e;
   --bg2:       #111827;
   --bg3:       #1e293b;
+  --surface:   #111827;   /* superficie de tarjetas (login); igual a --bg2 en tema oscuro */
   --border:    rgba(255,255,255,0.07);
   --text:      #f1f5f9;
   --text-muted:#94a3b8;
@@ -194,12 +195,6 @@ body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--tex
 }
 .form-select:focus-visible, .form-input:focus-visible { border-color: #fde047; }
 
-/* Texto solo para lectores de pantalla */
-.sr-only {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
-}
-
 /* Barra de estado del sistema */
 .estado-sistema {
   display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center;
@@ -240,5 +235,7 @@ body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--tex
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  /* Sin giro continuo (el 0.01ms haría parpadear el anillo); queda un anillo estático y el texto "Cargando" */
+  .spinner { animation: none; border-top-color: var(--accent); }
 }
 .cam-wrap .cam-video { object-fit: contain; }

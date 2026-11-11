@@ -8,12 +8,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <!-- defer conserva el orden de ejecución; SRI verifica que el archivo no fue alterado -->
+  <script defer crossorigin="anonymous" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script defer crossorigin="anonymous" integrity="sha384-xc4sZTUOM2obsQR75Be0zGbt7Gb6mOVFJN4yBm30Xn0YQLDWIY+yrtFmLmIank6w" src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
   <!-- COCO-SSD: proveedor primario (detección con bounding boxes, 80 clases COCO) -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+  <script defer crossorigin="anonymous" integrity="sha384-7qLdgfEQyO9ZQi9ArRHigK+IBto4XPk468jAqc+fnsXaZIcMAhQeLwzggRK7aESl" src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
   <!-- MobileNet: proveedor fallback (clasificación sin bbox, por si coco-ssd falla) -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+  <script defer crossorigin="anonymous" integrity="sha384-oBAqwJ0tv9zzKlbIZyBhhXlEvU/PMrSMqDyOHlEZVC8xWHx4yPySuS7vRikRcYFq" src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
 
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -56,7 +57,7 @@
           <input id="login-pass" type="password" class="form-input" placeholder="••••••••"
                  autocomplete="current-password" required />
         </div>
-        <button id="btn-login" type="button" class="btn-primary btn-full">
+        <button id="btn-login" type="submit" class="btn-primary btn-full">
           Iniciar sesión
         </button>
       </form>
@@ -78,7 +79,7 @@
           <input id="reg-pass" type="password" class="form-input" placeholder="••••••••"
                  autocomplete="new-password" required minlength="8" />
         </div>
-        <button id="btn-registro" type="button" class="btn-primary btn-full">
+        <button id="btn-registro" type="submit" class="btn-primary btn-full">
           Crear cuenta
         </button>
       </form>
