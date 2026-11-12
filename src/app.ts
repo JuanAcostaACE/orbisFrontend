@@ -275,7 +275,7 @@ async function enviarRegistro(): Promise<void> {
   try {
     await registro(nombre, correo, pass);
     mostrarTabAuth('login');
-    mostrarMsgAuth('Cuenta creada. Ahora inicia sesión.', false);
+    mostrarMsgAuth('Solicitud procesada. Inicia sesión para continuar.', false);
   } catch (e) {
     mostrarMsgAuth((e as Error).message);
   } finally {
