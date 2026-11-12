@@ -45,8 +45,9 @@ body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--tex
 .kpi-label { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
 
 /* DASHBOARD GRID */
-.dashboard-grid { display: grid; grid-template-columns: 1fr 400px; gap: 1rem; margin-bottom: 1.5rem; }
-@media (max-width: 900px) { .dashboard-grid { grid-template-columns: 1fr; } }
+.dashboard-grid { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 1rem; margin-bottom: 1.5rem; }
+.dashboard-grid > * { min-width: 0; }
+@media (max-width: 900px) { .dashboard-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* CARD */
 .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
@@ -174,6 +175,17 @@ body { font-family: "Inter", sans-serif; background: var(--bg); color: var(--tex
 .usuario-correo { font-size: 0.78rem; color: var(--text-muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn-logout { background: transparent; border: 1px solid var(--border); color: var(--text-muted); border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.78rem; cursor: pointer; transition: background 0.15s, color 0.15s; }
 .btn-logout:hover { background: rgba(239,68,68,0.12); color: #fca5a5; border-color: rgba(239,68,68,0.3); }
+
+/* Móvil estrecho (≤480px): el header envuelve en dos líneas en vez de desbordar.
+   Sin cambios por encima de 480px. */
+@media (max-width: 480px) {
+  .header { padding: 0 0.75rem; }
+  .header-inner { height: auto; min-height: 60px; flex-wrap: wrap; gap: 0.5rem 0.75rem; padding: 0.5rem 0; }
+  .logo { flex: 1 1 auto; min-width: 0; }
+  .logo-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header-actions { flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; min-width: 0; max-width: 100%; }
+  .usuario-correo { min-width: 0; max-width: 100%; }
+}
 
 /* ── Paginación ── */
 .paginacion { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: 0.75rem 0 0.25rem; }
