@@ -40,7 +40,7 @@ interface AuthResponse {
   mensaje?: string;
 }
 
-import { gestorVision, type ResultadoInferencia, type Deteccion } from './vision.js';
+import { gestorVision, MENSAJE_ERROR_MODELO, type ResultadoInferencia, type Deteccion } from './vision.js';
 import { HisteresisPasiva, nivelDistancia, UMBRAL_CRITICO_CM } from './alertas.js';
 
 declare const Chart: any;
@@ -274,8 +274,8 @@ async function enviarRegistro(): Promise<void> {
   btn.textContent = 'Registrando...';
   try {
     await registro(nombre, correo, pass);
-    mostrarMsgAuth('Cuenta creada. Ahora inicia sesión.', false);
     mostrarTabAuth('login');
+    mostrarMsgAuth('Cuenta creada. Ahora inicia sesión.', false);
   } catch (e) {
     mostrarMsgAuth((e as Error).message);
   } finally {
@@ -766,7 +766,10 @@ function renderTabla(): void {
       tdDist.textContent = '--';
     }
     tr.appendChild(tdDist);
-    tr.appendChild(tdText(e.etiquetasIA ?? '--', 'td-ia'));
+    // Mismo criterio que el mensaje de confirmación: SIN_IMAGEN no se muestra
+    const etiquetasVisibles = e.etiquetasIA && e.etiquetasIA !== 'SIN_IMAGEN'
+      ? e.etiquetasIA : '--';
+    tr.appendChild(tdText(etiquetasVisibles, 'td-ia'));
     tr.appendChild(tdText(formatFecha(e.fechaHora), 'td-fecha'));
 
     const tdVoz = document.createElement('td');
@@ -906,7 +909,15 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
             return;
           }
           if (analisis.estado === 'ok') etiquetasIA = analisis.etiquetasFormateadas || null;
-        } catch (iaErr) { etiquetasIA = 'ERROR_IA: ' + (iaErr as Error).message; }
+        } catch (iaErr) {
+          // Error de análisis: no se envía evento al backend; se informa al usuario
+          const msgErr = (iaErr as Error).message;
+          simResult.textContent = msgErr === MENSAJE_ERROR_MODELO
+            ? msgErr
+            : 'Error de análisis: ' + msgErr;
+          simResult.classList.add('error');
+          return;
+        }
       }
     }
 
