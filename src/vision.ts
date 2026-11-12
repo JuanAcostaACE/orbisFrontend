@@ -216,14 +216,20 @@ export class GestorVision {
     try {
       await this.proveedor.inicializar();
       return this.proveedor.nombre;
-    } catch {
+    } catch (errPrimario) {
+      console.error(`[vision] No se pudo cargar ${this.proveedor.nombre}:`, errPrimario);
       if (this.fallback) {
-        await this.fallback.inicializar();
+        try {
+          await this.fallback.inicializar();
+        } catch (errFallback) {
+          console.error(`[vision] No se pudo cargar ${this.fallback.nombre}:`, errFallback);
+          throw new Error(MENSAJE_ERROR_MODELO);
+        }
         this.proveedor = this.fallback;
         this.fallback  = null;
         return `${this.proveedor.nombre} (fallback)`;
       }
-      throw new Error('No hay proveedor de visión disponible');
+      throw new Error(MENSAJE_ERROR_MODELO);
     }
   }
 
@@ -303,6 +309,10 @@ export class GestorVision {
 // ----------------------------------------------------------------
 // HELPERS
 // ----------------------------------------------------------------
+
+/** Mensaje mostrado al usuario cuando ningún modelo de detección puede cargarse. */
+export const MENSAJE_ERROR_MODELO =
+  'No se pudo cargar el modelo de detección. Revisa la conexión e inténtalo de nuevo.';
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
