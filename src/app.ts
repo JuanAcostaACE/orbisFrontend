@@ -43,6 +43,8 @@ interface AuthResponse {
 import { gestorVision, MENSAJE_ERROR_MODELO, type ResultadoInferencia, type Deteccion } from './vision.js';
 import { HisteresisPasiva, nivelDistancia, UMBRAL_CRITICO_CM } from './alertas.js';
 import { registrarCooldownTrasRespuesta } from './envio-pasivo.js';
+import { ControladorCamara } from './camera/selector.js';
+import { liberarFrame, type FrameVideo } from './camera/sources.js';
 
 declare const Chart: any;
 
@@ -84,7 +86,7 @@ let chart: any | null               = null;
 let chartType: 'bar' | 'line'       = 'bar';
 let autoInterval: number | null     = null;
 let autoRunning: boolean            = false;
-let streamActivo: MediaStream | null = null;
+let camara: ControladorCamara | null = null;   // capa de cámara (src/camera/)
 let fuenteImagen: 'cam' | 'file'    = 'cam';
 let usuarioActual: AuthResponse | null = null;
 const synth: SpeechSynthesis | null = window.speechSynthesis ?? null;
@@ -325,8 +327,15 @@ function iniciarDashboard(): void {
 
   getEl('btn-src-cam').addEventListener('click', () => cambiarFuente('cam'));
   getEl('btn-src-file').addEventListener('click', () => cambiarFuente('file'));
-  getEl('btn-cam-start').addEventListener('click', iniciarCamara);
-  getEl('btn-cam-stop').addEventListener('click', detenerCamara);
+  // Selector, botones iniciar/detener/reintentar y estado los cablea ControladorCamara (src/camera/)
+  camara = new ControladorCamara({
+    // El "bucle de detección" es el envío Auto (setInterval 5 s): detenerAuto cancela el timer;
+    // un envío en vuelo termina, pero no se lanza otro (envioEnCurso + mutex de GestorVision).
+    detenerDeteccion: () => { const corria = autoRunning; detenerAuto(); return corria; },
+    reanudarDeteccion: () => { if (!autoRunning) toggleAuto(); },
+    alCambiarActiva: (activa) => { if (!activa) limpiarOverlay(); }
+  });
+  void camara.iniciar();
 
   (getEl('sim-imagen') as HTMLInputElement).addEventListener('change', function(): void {
     const p = getElOrNull('sim-preview') as HTMLImageElement | null;
@@ -376,28 +385,32 @@ async function analizarConIA(
     await gestorVision.inicializarAsync();
   }
 
-  const video = getElOrNull('cam-video') as HTMLVideoElement | null;
-  let elemento: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
+  // Modelo pull: se pide un frame a la fuente activa solo cuando el detector va a usarlo
+  const frame: FrameVideo | null = (fuenteImagen === 'cam' && camara?.activa()) ? await camara.obtenerFrame() : null;
+  try {
+    let elemento: HTMLImageElement | HTMLCanvasElement | ImageBitmap;
+    if (frame) {
+      elemento = frame.source;
+    } else {
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise<void>(r => { img.onload = () => r(); });
+      elemento = img;
+    }
 
-  if (fuenteImagen === 'cam' && streamActivo && video) {
-    elemento = video;
-  } else {
-    const img = new Image();
-    img.src = dataUrl;
-    await new Promise<void>(r => { img.onload = () => r(); });
-    elemento = img;
+    const resultado: ResultadoInferencia = await gestorVision.inferir(
+      elemento,
+      distanciaActual,
+      UMBRAL_CRITICO_CM   // distancia crítica: fuerza el envío aunque sea duplicado
+    );
+
+    // Bounding boxes solo sobre el video en vivo (coordenadas del frame de la fuente)
+    if (resultado.estado === 'ok' && frame) dibujarDetecciones(resultado.detecciones, frame.width, frame.height);
+
+    return resultado;
+  } finally {
+    liberarFrame(frame);
   }
-
-  const resultado: ResultadoInferencia = await gestorVision.inferir(
-    elemento,
-    distanciaActual,
-    UMBRAL_CRITICO_CM   // distancia crítica: fuerza el envío aunque sea duplicado
-  );
-
-  // Bounding boxes solo sobre el video en vivo (coordenadas del frame del video)
-  if (resultado.estado === 'ok' && elemento === video) dibujarDetecciones(resultado.detecciones);
-
-  return resultado;
 }
 
 /** Mensaje de estado para un análisis que no produjo evento (nunca se envía vacío). */
@@ -424,12 +437,11 @@ function limpiarOverlay(): void {
   canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-function dibujarDetecciones(dets: Deteccion[]): void {
-  const video  = getElOrNull('cam-video')   as HTMLVideoElement  | null;
+function dibujarDetecciones(dets: Deteccion[], vw: number, vh: number): void {
   const canvas = getElOrNull('cam-overlay') as HTMLCanvasElement | null;
-  if (!video || !canvas || !streamActivo) return;
-  const cw = video.clientWidth, ch = video.clientHeight;
-  const vw = video.videoWidth,  vh = video.videoHeight;
+  if (!canvas || !camara?.activa()) return;
+  // El overlay cubre exactamente al video (position:absolute; inset:0)
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
   if (!cw || !ch || !vw || !vh) return;
 
   const dpr = window.devicePixelRatio || 1;
@@ -479,44 +491,27 @@ function cambiarFuente(fuente: 'cam' | 'file'): void {
   if (fuente !== 'cam') detenerCamara();
 }
 
-async function iniciarCamara(): Promise<void> {
-  try {
-    streamActivo = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' },
-      audio: false
-    });
-    const video = getEl('cam-video') as HTMLVideoElement;
-    video.srcObject = streamActivo;
-    getEl('btn-cam-start').classList.add('hidden');
-    getEl('btn-cam-stop').classList.remove('hidden');
-    const status = getElOrNull('cam-status');
-    if (status) { status.textContent = 'Camara activa'; status.className = 'cam-status active'; }
-  } catch (e) {
-    alert('No se pudo acceder a la camara: ' + (e as Error).message);
-  }
-}
-
+/** Detiene cámara y también el envío Auto (nunca debe seguir enviando sin cámara). */
 function detenerCamara(): void {
-  streamActivo?.getTracks().forEach(t => t.stop());
-  streamActivo = null;
+  camara?.detener(true);
   limpiarOverlay();
-  const video = getElOrNull('cam-video') as HTMLVideoElement | null;
-  if (video) video.srcObject = null;
-  getElOrNull('btn-cam-start')?.classList.remove('hidden');
-  getElOrNull('btn-cam-stop')?.classList.add('hidden');
-  const status = getElOrNull('cam-status');
-  if (status) { status.textContent = 'Camara inactiva'; status.className = 'cam-status'; }
 }
 
-function capturarFrame(): string | null {
-  const video  = getElOrNull('cam-video') as HTMLVideoElement | null;
+/** JPEG reducido del frame actual de la fuente activa (para el análisis/evento). */
+async function capturarFrame(): Promise<string | null> {
   const canvas = getElOrNull('cam-canvas') as HTMLCanvasElement | null;
-  if (!streamActivo || !video || !canvas) return null;
-  const MAX = 480, w = video.videoWidth || 640, h = video.videoHeight || 480;
-  const ratio = Math.min(MAX / w, MAX / h, 1);
-  canvas.width = Math.round(w * ratio); canvas.height = Math.round(h * ratio);
-  canvas.getContext('2d')!.drawImage(video, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.5);
+  if (!canvas || !camara?.activa()) return null;
+  const frame = await camara.obtenerFrame();
+  if (!frame) return null;
+  try {
+    const MAX = 480, w = frame.width || 640, h = frame.height || 480;
+    const ratio = Math.min(MAX / w, MAX / h, 1);
+    canvas.width = Math.round(w * ratio); canvas.height = Math.round(h * ratio);
+    canvas.getContext('2d')!.drawImage(frame.source, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.5);
+  } finally {
+    liberarFrame(frame);
+  }
 }
 
 // ----------------------------------------------------------------
@@ -892,8 +887,8 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
 
     if (modo === 'ACTIVO') {
       let dataUrl: string | null = null;
-      if (fuenteImagen === 'cam' && streamActivo) {
-        dataUrl = capturarFrame();
+      if (fuenteImagen === 'cam' && camara?.activa()) {
+        dataUrl = await capturarFrame();
         if (!dataUrl) throw new Error('No se pudo capturar frame');
       } else if (fuenteImagen === 'file') {
         const fi = getElOrNull('sim-imagen') as HTMLInputElement | null;
