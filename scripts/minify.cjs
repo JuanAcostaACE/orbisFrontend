@@ -28,7 +28,7 @@ const DIST   = path.join(__dirname, '..', 'dist');
 const OUTPUT = path.join(__dirname, '..', 'app.js');
 
 // Orden de concatenación: yolo y vision primero (los importan vision y app)
-const ARCHIVOS = ['yolo.js', 'vision.js', 'alertas.js', 'envio-pasivo.js', 'app.js'];
+const ARCHIVOS = ['yolo.js', 'vision.js', 'alertas.js', 'envio-pasivo.js', 'camera/devices.js', 'camera/sources.js', 'camera/selector.js', 'app.js'];
 
 async function run() {
   const faltantes = ARCHIVOS.filter(f => !fs.existsSync(path.join(DIST, f)));
@@ -44,7 +44,7 @@ async function run() {
     let contenido = fs.readFileSync(path.join(DIST, archivo), 'utf-8');
     // Eliminar imports/exports inter-módulos (ya concatenados)
     contenido = contenido
-      .replace(/^import\s+[^;\n]*?from\s+['"]\.\/[\w-]+\.js['"]\s*;?[ \t]*\r?\n?/gm, '')
+      .replace(/^import\s+[^;\n]*?from\s+['"]\.\/(?:[\w-]+\/)*[\w-]+\.js['"]\s*;?[ \t]*\r?\n?/gm, '')
       .replace(/^export\s+(const|let|var|class|function|interface|type)\s+/gm, '$1 ')
       .replace(/^export\s+\{[^}]+\}\s*;?\s*/gm, '')
       .replace(/^export\s+default\s+/gm, 'const _default = ');
