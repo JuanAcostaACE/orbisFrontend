@@ -115,6 +115,8 @@ export type ResultadoInferencia =
       etiquetasFormateadas: string;
       /** True si esta detección es un duplicado dentro del cooldown. */
       esDuplicado: boolean;
+      /** Clase principal de la detección (para confirmarEnvio tras un POST correcto). */
+      clasePrincipal: string;
       /** Nombre del proveedor que realizó la inferencia. */
       proveedor: string;
     };
@@ -139,7 +141,12 @@ export class GestorVision {
 
   constructor(
     proveedor: VisionProvider,
-    config: Partial<VisionConfig> = {}
+    config: Partial<VisionConfig> = {},
+    // Reloj inyectable (tests). Por defecto: performance.now() para el throttle y Date.now() para el cooldown.
+    private readonly reloj: { perf(): number; wall(): number } = {
+      perf: () => performance.now(),
+      wall: () => Date.now()
+    }
   ) {
     this.proveedor = proveedor;
     this.config    = { ...CONFIG_DEFAULT, ...config };
@@ -176,17 +183,19 @@ export class GestorVision {
     if (this.inferenciaEnCurso) return { estado: 'omitida', motivo: 'ocupado' };
 
     // ── Throttle: intervalo mínimo ──
-    const ahora = performance.now();
+    const ahora = this.reloj.perf();
     if (ahora - this.ultimaInferenciaTs < this.config.minInferenceMs) return { estado: 'omitida', motivo: 'throttle' };
 
     // ── Proveedor no listo ──
     if (!this.proveedor.listo()) return { estado: 'omitida', motivo: 'no_listo' };
 
     this.inferenciaEnCurso = true;
-    this.ultimaInferenciaTs = ahora;
 
     try {
       const detecciones = await this.proveedor.inferir(elemento);
+
+      // Solo una inferencia completada consume el intervalo mínimo; un fallo no bloquea el siguiente intento.
+      this.ultimaInferenciaTs = ahora;
 
       // Filtrar por umbral mínimo de confianza
       const validas = detecciones
@@ -200,9 +209,9 @@ export class GestorVision {
         `${d.clase} (${(d.confianza * 100).toFixed(0)}%)`
       ).join(', ');
 
-      // ── Deduplicación ──
-      const ahoraSinPerf = Date.now();
-      const enCooldown   = (ahoraSinPerf - this.ultimoEnvioTs) < this.config.cooldownDeduplicacionMs;
+      // ── Deduplicación (solo lectura: el cooldown se registra en confirmarEnvio tras un POST correcto) ──
+      const ahoraWall    = this.reloj.wall();
+      const enCooldown   = (ahoraWall - this.ultimoEnvioTs) < this.config.cooldownDeduplicacionMs;
       const mismaCLase   = clasePrincipal === this.ultimaClasePrincipal;
 
       // Considerar excepción al cooldown si la distancia entró en zona crítica
@@ -210,22 +219,29 @@ export class GestorVision {
 
       const esDuplicado = enCooldown && mismaCLase && !distanciaCritica;
 
-      if (!esDuplicado) {
-        this.ultimaClasePrincipal = clasePrincipal;
-        this.ultimoEnvioTs        = ahoraSinPerf;
-      }
-
       return {
         estado: 'ok',
         detecciones: validas,
         etiquetasFormateadas: etiquetas,
         esDuplicado,
+        clasePrincipal,
         proveedor: this.proveedor.nombre
       };
 
     } finally {
       this.inferenciaEnCurso = false;
     }
+  }
+
+  /**
+   * Registra el cooldown de deduplicación. Llamar solo cuando el evento se envió
+   * correctamente (POST con éxito). Si el envío falla, no llamar: la siguiente
+   * detección puede enviarse.
+   */
+  confirmarEnvio(resultado: ResultadoInferencia): void {
+    if (resultado.estado !== 'ok' || resultado.esDuplicado) return;
+    this.ultimaClasePrincipal = resultado.clasePrincipal;
+    this.ultimoEnvioTs        = this.reloj.wall();
   }
 }
 
