@@ -155,7 +155,7 @@ function nms(
 // ----------------------------------------------------------------
 
 export function preprocesar(
-  elem: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
+  elem: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | ImageBitmap
 ): { datos: Float32Array; ratio: number; ancho: number; alto: number } {
   const ancho = elem instanceof HTMLVideoElement ? elem.videoWidth
               : elem instanceof HTMLImageElement ? elem.naturalWidth
@@ -219,7 +219,7 @@ export class YoloxNano {
   }
 
   async detectar(
-    elem: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
+    elem: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | ImageBitmap,
     confianza = CONFIANZA_MINIMA
   ): Promise<DeteccionYolo[]> {
     if (!this.sesion) throw new Error('YoloxNano: modelo no inicializado');

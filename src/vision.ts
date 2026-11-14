@@ -42,7 +42,7 @@ export interface VisionProvider {
    * @throws Error si el modelo no está inicializado.
    */
   inferir(
-    elemento: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
+    elemento: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | ImageBitmap
   ): Promise<Deteccion[]>;
 
   /** Libera recursos del modelo de memoria. */
@@ -64,7 +64,7 @@ export class YoloxProvider implements VisionProvider {
   inicializar(): Promise<void> { return this.yolo.inicializar(); }
 
   async inferir(
-    elem: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
+    elem: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | ImageBitmap
   ): Promise<Deteccion[]> {
     if (!this.yolo.listo()) throw new Error('YoloxProvider: modelo no inicializado');
     const dets = await this.yolo.detectar(elem);
@@ -175,7 +175,7 @@ export class GestorVision {
    * Devuelve 'sin_deteccion' si la inferencia se ejecutó sin resultados válidos.
    */
   async inferir(
-    elemento: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
+    elemento: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | ImageBitmap,
     distanciaActual?: number,
     umbralCriticoCm = 30
   ): Promise<ResultadoInferencia> {
