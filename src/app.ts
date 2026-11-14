@@ -42,6 +42,7 @@ interface AuthResponse {
 
 import { gestorVision, MENSAJE_ERROR_MODELO, type ResultadoInferencia, type Deteccion } from './vision.js';
 import { HisteresisPasiva, nivelDistancia, UMBRAL_CRITICO_CM } from './alertas.js';
+import { registrarCooldownTrasRespuesta } from './envio-pasivo.js';
 
 declare const Chart: any;
 
@@ -878,7 +879,6 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
     }
   }
   envioEnCurso = true;
-  if (modo === 'PASIVO') histeresis.registrarEnvio(Date.now());
 
   btn.disabled = true; btn.textContent = 'Procesando...';
   simResult.className = 'sim-result';
@@ -936,7 +936,8 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
 
     if (res.status === 401) { await logout(); return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    // Envío correcto: ahora sí registrar el cooldown de duplicados
+    // Envío correcto: ahora sí registrar el cooldown PASIVO y de duplicados de IA
+    registrarCooldownTrasRespuesta(histeresis, modo, res, Date.now());
     if (analisisEnviado) gestorVision.confirmarEnvio(analisisEnviado);
 
     const data = await res.json() as EventoResponse;
