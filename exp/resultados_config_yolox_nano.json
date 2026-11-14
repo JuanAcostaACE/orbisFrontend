@@ -1,0 +1,310 @@
+{
+ "n_imagenes": 60,
+ "n_personas_gt": 239,
+ "A": {
+  "per_class": {
+   "thr": 0.5,
+   "TP": 99,
+   "FP": 10,
+   "FN": 140,
+   "precision": 0.908256880733945,
+   "recall": 0.41422594142259417,
+   "f1": 0.5689655172413793,
+   "cross_class": {
+    "pares": 1,
+    "pares_con_person": 0,
+    "detecciones_redundantes": 1
+   },
+   "n_detecciones_total": 182,
+   "duplicados_eliminados_vs_per_class": 0
+  },
+  "agnostic": {
+   "thr": 0.5,
+   "TP": 99,
+   "FP": 10,
+   "FN": 140,
+   "precision": 0.908256880733945,
+   "recall": 0.41422594142259417,
+   "f1": 0.5689655172413793,
+   "cross_class": {
+    "pares": 0,
+    "pares_con_person": 0,
+    "detecciones_redundantes": 0
+   },
+   "n_detecciones_total": 181,
+   "duplicados_eliminados_vs_per_class": 1
+  },
+  "person_only": {
+   "thr": 0.5,
+   "TP": 99,
+   "FP": 10,
+   "FN": 140,
+   "precision": 0.908256880733945,
+   "recall": 0.41422594142259417,
+   "f1": 0.5689655172413793,
+   "cross_class": {
+    "pares": 0,
+    "pares_con_person": 0,
+    "detecciones_redundantes": 0
+   },
+   "n_detecciones_total": 109,
+   "duplicados_eliminados_vs_per_class": 1
+  }
+ },
+ "B": {
+  "per_class": [
+   {
+    "thr": 0.1,
+    "TP": 142,
+    "FP": 107,
+    "FN": 97,
+    "precision": 0.570281124497992,
+    "recall": 0.5941422594142259,
+    "f1": 0.5819672131147542
+   },
+   {
+    "thr": 0.2,
+    "TP": 130,
+    "FP": 48,
+    "FN": 109,
+    "precision": 0.7303370786516854,
+    "recall": 0.5439330543933054,
+    "f1": 0.6235011990407674
+   },
+   {
+    "thr": 0.3,
+    "TP": 117,
+    "FP": 32,
+    "FN": 122,
+    "precision": 0.785234899328859,
+    "recall": 0.4895397489539749,
+    "f1": 0.6030927835051547
+   },
+   {
+    "thr": 0.4,
+    "TP": 109,
+    "FP": 17,
+    "FN": 130,
+    "precision": 0.8650793650793651,
+    "recall": 0.4560669456066946,
+    "f1": 0.5972602739726027
+   },
+   {
+    "thr": 0.5,
+    "TP": 99,
+    "FP": 10,
+    "FN": 140,
+    "precision": 0.908256880733945,
+    "recall": 0.41422594142259417,
+    "f1": 0.5689655172413793
+   },
+   {
+    "thr": 0.6,
+    "TP": 90,
+    "FP": 5,
+    "FN": 149,
+    "precision": 0.9473684210526315,
+    "recall": 0.37656903765690375,
+    "f1": 0.5389221556886228
+   },
+   {
+    "thr": 0.7,
+    "TP": 75,
+    "FP": 2,
+    "FN": 164,
+    "precision": 0.974025974025974,
+    "recall": 0.3138075313807531,
+    "f1": 0.47468354430379744
+   },
+   {
+    "thr": 0.8,
+    "TP": 51,
+    "FP": 0,
+    "FN": 188,
+    "precision": 1.0,
+    "recall": 0.21338912133891214,
+    "f1": 0.3517241379310345
+   },
+   {
+    "thr": 0.9,
+    "TP": 12,
+    "FP": 0,
+    "FN": 227,
+    "precision": 1.0,
+    "recall": 0.0502092050209205,
+    "f1": 0.0956175298804781
+   }
+  ],
+  "agnostic": [
+   {
+    "thr": 0.1,
+    "TP": 142,
+    "FP": 102,
+    "FN": 97,
+    "precision": 0.5819672131147541,
+    "recall": 0.5941422594142259,
+    "f1": 0.5879917184265011
+   },
+   {
+    "thr": 0.2,
+    "TP": 130,
+    "FP": 48,
+    "FN": 109,
+    "precision": 0.7303370786516854,
+    "recall": 0.5439330543933054,
+    "f1": 0.6235011990407674
+   },
+   {
+    "thr": 0.3,
+    "TP": 117,
+    "FP": 32,
+    "FN": 122,
+    "precision": 0.785234899328859,
+    "recall": 0.4895397489539749,
+    "f1": 0.6030927835051547
+   },
+   {
+    "thr": 0.4,
+    "TP": 109,
+    "FP": 17,
+    "FN": 130,
+    "precision": 0.8650793650793651,
+    "recall": 0.4560669456066946,
+    "f1": 0.5972602739726027
+   },
+   {
+    "thr": 0.5,
+    "TP": 99,
+    "FP": 10,
+    "FN": 140,
+    "precision": 0.908256880733945,
+    "recall": 0.41422594142259417,
+    "f1": 0.5689655172413793
+   },
+   {
+    "thr": 0.6,
+    "TP": 90,
+    "FP": 5,
+    "FN": 149,
+    "precision": 0.9473684210526315,
+    "recall": 0.37656903765690375,
+    "f1": 0.5389221556886228
+   },
+   {
+    "thr": 0.7,
+    "TP": 75,
+    "FP": 2,
+    "FN": 164,
+    "precision": 0.974025974025974,
+    "recall": 0.3138075313807531,
+    "f1": 0.47468354430379744
+   },
+   {
+    "thr": 0.8,
+    "TP": 51,
+    "FP": 0,
+    "FN": 188,
+    "precision": 1.0,
+    "recall": 0.21338912133891214,
+    "f1": 0.3517241379310345
+   },
+   {
+    "thr": 0.9,
+    "TP": 12,
+    "FP": 0,
+    "FN": 227,
+    "precision": 1.0,
+    "recall": 0.0502092050209205,
+    "f1": 0.0956175298804781
+   }
+  ]
+ },
+ "B_ref_0.55": {
+  "per_class": {
+   "thr": 0.55,
+   "TP": 95,
+   "FP": 6,
+   "FN": 144,
+   "precision": 0.9405940594059405,
+   "recall": 0.39748953974895396,
+   "f1": 0.5588235294117646
+  },
+  "agnostic": {
+   "thr": 0.55,
+   "TP": 95,
+   "FP": 6,
+   "FN": 144,
+   "precision": 0.9405940594059405,
+   "recall": 0.39748953974895396,
+   "f1": 0.5588235294117646
+  }
+ },
+ "C": {
+  "thr": 0.5,
+  "nms": "per_class",
+  "comparaciones": {
+   "cv2_linear_vs_pil_bilinear": {
+    "pares_emparejados": 179,
+    "coord_abs_media_px": 0.8898994184811938,
+    "coord_abs_max_px": 51.334343537688255,
+    "score_abs_media": 0.010792305016650834,
+    "score_abs_max": 0.09153348207473755,
+    "detecciones_que_aparecen": 5,
+    "detecciones_que_desaparecen": 3,
+    "raw_abs_media": 0.003592242719605565
+   },
+   "cv2_linear_vs_canvas": {
+    "pares_emparejados": 181,
+    "coord_abs_media_px": 0.35330687067085537,
+    "coord_abs_max_px": 22.599188804626465,
+    "score_abs_media": 0.0031716010188529505,
+    "score_abs_max": 0.02971363067626953,
+    "detecciones_que_aparecen": 2,
+    "detecciones_que_desaparecen": 1,
+    "raw_abs_media": 0.0013524132082238793
+   }
+  },
+  "cv2_linear": {
+   "thr": 0.5,
+   "TP": 99,
+   "FP": 10,
+   "FN": 140,
+   "precision": 0.908256880733945,
+   "recall": 0.41422594142259417,
+   "f1": 0.5689655172413793,
+   "small_recall_tp_total": [
+    16,
+    118
+   ],
+   "n_dets_total": 182
+  },
+  "pil_bilinear": {
+   "thr": 0.5,
+   "TP": 100,
+   "FP": 9,
+   "FN": 139,
+   "precision": 0.9174311926605505,
+   "recall": 0.41841004184100417,
+   "f1": 0.5747126436781609,
+   "small_recall_tp_total": [
+    16,
+    118
+   ],
+   "n_dets_total": 184
+  },
+  "canvas": {
+   "thr": 0.5,
+   "TP": 100,
+   "FP": 10,
+   "FN": 139,
+   "precision": 0.9090909090909091,
+   "recall": 0.41841004184100417,
+   "f1": 0.5730659025787964,
+   "small_recall_tp_total": [
+    16,
+    118
+   ],
+   "n_dets_total": 183
+  }
+ }
+}
