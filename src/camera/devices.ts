@@ -66,6 +66,19 @@ export function elegirPredeterminada(camaras: CamaraInfo[], guardado: string | n
 }
 
 /**
+ * Selección a mostrar tras refrescar la lista. Prioridad: 1) la cámara activa si sigue presente;
+ * 2) la elección manual del usuario en esta sesión si sigue presente; 3) la regla por defecto
+ * (guardada > C920/Logitech > primera), que se reevalúa cuando llegan las etiquetas reales.
+ */
+export function resolverSeleccion(
+  camaras: CamaraInfo[], actual: string | null, manual: boolean, activo: string | null, guardado: string | null
+): string | null {
+  if (activo && camaras.some(c => c.deviceId === activo)) return activo;
+  if (manual && actual && camaras.some(c => c.deviceId === actual)) return actual;
+  return elegirPredeterminada(camaras, guardado);
+}
+
+/**
  * Pide permiso abriendo y cerrando de inmediato un stream, para que el navegador revele las
  * etiquetas reales. El stream se detiene antes de retornar (nunca queda abierto).
  */

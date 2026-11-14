@@ -5,7 +5,7 @@
    ================================================================ */
 
 import { BrowserCameraSource, type VideoSource, type FrameVideo } from './sources.js';
-import { camaraSoportada, listarCamaras, leerPreferencia, guardarPreferencia, elegirPredeterminada, solicitarPermisoParaEtiquetas, traducirErrorCamara, type CamaraInfo } from './devices.js';
+import { camaraSoportada, listarCamaras, leerPreferencia, guardarPreferencia, resolverSeleccion, solicitarPermisoParaEtiquetas, traducirErrorCamara, type CamaraInfo } from './devices.js';
 
 export type EstadoCamara = 'sin-camara' | 'solicitando' | 'en-vivo' | 'error' | 'desconectada';
 
@@ -43,6 +43,7 @@ export class ControladorCamara {
   private estado: EstadoCamara = 'sin-camara';
   private deviceActivo = '';
   private token = 0;                 // invalida arranques obsoletos (cambios rápidos de cámara)
+  private seleccionManual = false;   // el usuario eligió cámara en esta sesión: se respeta
   private reanudar = false;          // la detección estaba corriendo antes del cambio
 
   constructor(private readonly opc: OpcionesControladorCamara) {
@@ -91,9 +92,9 @@ export class ControladorCamara {
 
   private async refrescarLista(): Promise<void> {
     try { this.camaras = await listarCamaras(); } catch { this.camaras = []; }
-    const actual = this.select.value;
-    const conservar = actual && this.camaras.some(c => c.deviceId === actual) ? actual : null;
-    this.pintarSelect(conservar ?? elegirPredeterminada(this.camaras, leerPreferencia()));
+    this.pintarSelect(resolverSeleccion(
+      this.camaras, this.select.value || null, this.seleccionManual, this.deviceActivo || null, leerPreferencia()
+    ));
   }
 
   private pintarSelect(seleccionado?: string | null): void {
@@ -123,9 +124,13 @@ export class ControladorCamara {
 
   private alElegir(): void {
     const id = this.select.value;
+    this.seleccionManual = true;
     if (id) guardarPreferencia(id);
-    // Si hay cámara en vivo (o arrancando), cambiar de cámara sin recargar la página
-    if (id && (this.estado === 'en-vivo' || this.estado === 'solicitando')) void this.arrancar(id, false);
+    // En vivo/arrancando: cambio en caliente. Desconectada/error: se inicia la nueva cámara de
+    // inmediato (es la acción de recuperación). Sin cámara: solo queda lista; se inicia con el botón.
+    const auto = this.estado === 'en-vivo' || this.estado === 'solicitando'
+      || this.estado === 'desconectada' || this.estado === 'error';
+    if (id && auto) void this.arrancar(id, false);
   }
 
   // ---------------- Arranque / cambio / parada ----------------
