@@ -1,0 +1,67 @@
+{
+ "etiqueta": "cv2.resize REAL (opencv-python-headless 5.0.0), no emulacion",
+ "umbral": 0.5,
+ "nms": "oficial multiclass_nms clase a clase",
+ "imagenes": 60,
+ "personas_gt": 239,
+ "cv2_INTER_LINEAR_REAL": {
+  "person_TP": 99,
+  "person_FP": 9,
+  "person_FN": 140,
+  "recall": 0.41422594142259417,
+  "precision": 0.9166666666666666,
+  "pequenas_area_lt_1pct": {
+   "detectadas": 16,
+   "total": 118,
+   "recall": 0.13559322033898305
+  },
+  "n_dets_total": 181,
+  "pixeles_abs_media_vs_cv2": 0.0
+ },
+ "PIL_bilinear": {
+  "person_TP": 100,
+  "person_FP": 9,
+  "person_FN": 139,
+  "recall": 0.41841004184100417,
+  "precision": 0.9174311926605505,
+  "pequenas_area_lt_1pct": {
+   "detectadas": 16,
+   "total": 118,
+   "recall": 0.13559322033898305
+  },
+  "n_dets_total": 184,
+  "pixeles_abs_media_vs_cv2": 1.5932796359062196
+ },
+ "numpy_emulacion_previa": {
+  "person_TP": 99,
+  "person_FP": 10,
+  "person_FN": 140,
+  "recall": 0.41422594142259417,
+  "precision": 0.908256880733945,
+  "pequenas_area_lt_1pct": {
+   "detectadas": 16,
+   "total": 118,
+   "recall": 0.13559322033898305
+  },
+  "n_dets_total": 182,
+  "pixeles_abs_media_vs_cv2": 0.08771431719263395
+ },
+ "cv2_REAL_vs_PIL_bilinear": {
+  "pares_emparejados": 178,
+  "coord_abs_media_px": 0.9070408659427311,
+  "coord_abs_max_px": 51.37532043457031,
+  "score_abs_media": 0.009898193766561788,
+  "score_abs_max": 0.09047400951385498,
+  "detecciones_que_aparecen": 6,
+  "detecciones_que_desaparecen": 3
+ },
+ "cv2_REAL_vs_numpy_emulacion_previa": {
+  "pares_emparejados": 181,
+  "coord_abs_media_px": 0.09692476284355749,
+  "coord_abs_max_px": 8.81927490234375,
+  "score_abs_media": 0.0012028059248107572,
+  "score_abs_max": 0.013998270034790039,
+  "detecciones_que_aparecen": 1,
+  "detecciones_que_desaparecen": 0
+ }
+}
