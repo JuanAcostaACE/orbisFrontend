@@ -28,7 +28,7 @@ const DIST   = path.join(__dirname, '..', 'dist');
 const OUTPUT = path.join(__dirname, '..', 'app.js');
 
 // Orden de concatenación: yolo y vision primero (los importan vision y app)
-const ARCHIVOS = ['yolo.js', 'vision.js', 'alertas.js', 'app.js'];
+const ARCHIVOS = ['yolo.js', 'vision.js', 'alertas.js', 'envio-pasivo.js', 'app.js'];
 
 async function run() {
   const faltantes = ARCHIVOS.filter(f => !fs.existsSync(path.join(DIST, f)));
