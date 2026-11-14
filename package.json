@@ -6,7 +6,8 @@
     "build": "tsc && node scripts/minify.cjs",
     "build:ts": "tsc",
     "watch": "tsc --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node tests/yolo.decode.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

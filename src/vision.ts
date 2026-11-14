@@ -3,18 +3,16 @@
    TypeScript compilado a dist/vision.js por tsc
 
    ARQUITECTURA:
-   VisionProvider (interfaz) ← CocoSsdProvider (primario, TF.js COCO-SSD)
-                             ← MobileNetProvider (fallback)
+   VisionProvider (interfaz) ← YoloxProvider (YOLOX-Nano, ONNX Runtime Web)
 
    CONTROL DE SATURACIÓN:
    - Mutex inferenciaEnCurso: evita llamadas paralelas
    - Intervalo mínimo MIN_INFERENCE_MS entre inferencias
-   - Umbral mínimo de confianza MIN_CONFIDENCE
+   - Umbral mínimo de confianza (CONFIANZA_MINIMA, definido en yolo.ts)
    - Deduplicación: no envía POST si la detección es igual y está en cooldown
    ================================================================ */
 
-declare const cocoSsd: any;    // CDN @tensorflow-models/coco-ssd
-declare const mobilenet: any;  // CDN @tensorflow-models/mobilenet
+import { YoloxNano, CONFIANZA_MINIMA } from './yolo.js';
 
 // ----------------------------------------------------------------
 // INTERFACES PÚBLICAS
@@ -52,96 +50,35 @@ export interface VisionProvider {
 }
 
 // ----------------------------------------------------------------
-// PROVEEDOR PRIMARIO: COCO-SSD (TF.js)
-// Bounding boxes + clase + confianza — 80 clases COCO
-// Peso: ~6 MB | CPU friendly | Sin GPU requerido
+// PROVEEDOR: YOLOX-Nano (ONNX Runtime Web)
+// Bounding boxes 2D + clase + confianza — 80 clases COCO, entrada 416x416
+// Peso: ~3,6 MB | WASM (CPU) | Sin GPU requerido
 // ----------------------------------------------------------------
 
-export class CocoSsdProvider implements VisionProvider {
-  readonly nombre = 'COCO-SSD';
-  private modelo: any | null = null;
-  private cargando = false;
+export class YoloxProvider implements VisionProvider {
+  readonly nombre = 'YOLOX-Nano';
+  private readonly yolo = new YoloxNano();
 
-  listo(): boolean { return this.modelo !== null; }
+  listo(): boolean { return this.yolo.listo(); }
 
-  async inicializar(): Promise<void> {
-    if (this.modelo) return;
-    if (this.cargando) {
-      while (this.cargando) await sleep(150);
-      return;
-    }
-    this.cargando = true;
-    try {
-      this.modelo = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
-    } finally {
-      this.cargando = false;
-    }
-  }
+  inicializar(): Promise<void> { return this.yolo.inicializar(); }
 
   async inferir(
     elem: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
   ): Promise<Deteccion[]> {
-    if (!this.modelo) throw new Error('CocoSsdProvider: modelo no inicializado');
-    const predicciones = await this.modelo.detect(elem) as Array<{
-      class: string; score: number; bbox: [number, number, number, number];
-    }>;
+    if (!this.yolo.listo()) throw new Error('YoloxProvider: modelo no inicializado');
+    const dets = await this.yolo.detectar(elem);
     const ts = performance.now();
-    return predicciones.map(p => ({
-      clase:     capitalizar(p.class),
-      confianza: p.score,
-      bbox:      p.bbox,
+    return dets.map(d => ({
+      clase:     capitalizar(d.clase),
+      confianza: d.confianza,
+      bbox:      d.bbox,
       timestamp: ts
     }));
   }
 
   liberar(): void {
-    this.modelo = null;
-  }
-}
-
-// ----------------------------------------------------------------
-// PROVEEDOR FALLBACK: MobileNet (TF.js)
-// Clasificación sin bboxes — fallback si COCO-SSD falla o no disponible
-// ----------------------------------------------------------------
-
-export class MobileNetProvider implements VisionProvider {
-  readonly nombre = 'MobileNet';
-  private modelo: any | null = null;
-  private cargando = false;
-
-  listo(): boolean { return this.modelo !== null; }
-
-  async inicializar(): Promise<void> {
-    if (this.modelo) return;
-    if (this.cargando) {
-      while (this.cargando) await sleep(150);
-      return;
-    }
-    this.cargando = true;
-    try {
-      this.modelo = await mobilenet.load({ version: 2, alpha: 1.0 });
-    } finally {
-      this.cargando = false;
-    }
-  }
-
-  async inferir(
-    elem: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
-  ): Promise<Deteccion[]> {
-    if (!this.modelo) throw new Error('MobileNetProvider: modelo no inicializado');
-    const predicciones = await this.modelo.classify(elem, 3) as Array<{
-      className: string; probability: number;
-    }>;
-    const ts = performance.now();
-    return predicciones.map(p => {
-      let clase = p.className ?? '';
-      if (clase.includes(',')) clase = clase.split(',').pop()!.trim();
-      return { clase: capitalizar(clase), confianza: p.probability, timestamp: ts };
-    });
-  }
-
-  liberar(): void {
-    this.modelo = null;
+    this.yolo.liberar();
   }
 }
 
@@ -165,7 +102,7 @@ export type MotivoOmision = 'ocupado' | 'throttle' | 'no_listo';
 /**
  * Resultado de una inferencia gestionada. Los tres casos son distintos:
  *  - omitida: no se ejecutó (mutex, intervalo mínimo o modelo no listo)
- *  - sin_deteccion: se ejecutó, pero ningún objeto superó MIN_CONFIDENCE
+ *  - sin_deteccion: se ejecutó, pero ningún objeto superó la confianza mínima
  *  - ok: hay detecciones válidas; esDuplicado indica si entran en cooldown
  */
 export type ResultadoInferencia =
@@ -184,14 +121,13 @@ export type ResultadoInferencia =
 
 const CONFIG_DEFAULT: VisionConfig = {
   minInferenceMs:           1200,
-  minConfianza:             0.55,
+  minConfianza:             CONFIANZA_MINIMA,
   cooldownDeduplicacionMs: 5000
 };
 
 export class GestorVision {
   private readonly config: VisionConfig;
-  private proveedor: VisionProvider;
-  private fallback: VisionProvider | null;
+  private readonly proveedor: VisionProvider;
 
   // Control de saturación
   private inferenciaEnCurso = false;
@@ -203,32 +139,19 @@ export class GestorVision {
 
   constructor(
     proveedor: VisionProvider,
-    fallback: VisionProvider | null = null,
     config: Partial<VisionConfig> = {}
   ) {
     this.proveedor = proveedor;
-    this.fallback  = fallback;
     this.config    = { ...CONFIG_DEFAULT, ...config };
   }
 
-  /** Inicializa el proveedor primario en segundo plano; carga el fallback si el primario falla. */
+  /** Carga el modelo. Si falla, registra el error original y lanza el mensaje de usuario. */
   async inicializarAsync(): Promise<string> {
     try {
       await this.proveedor.inicializar();
       return this.proveedor.nombre;
-    } catch (errPrimario) {
-      console.error(`[vision] No se pudo cargar ${this.proveedor.nombre}:`, errPrimario);
-      if (this.fallback) {
-        try {
-          await this.fallback.inicializar();
-        } catch (errFallback) {
-          console.error(`[vision] No se pudo cargar ${this.fallback.nombre}:`, errFallback);
-          throw new Error(MENSAJE_ERROR_MODELO);
-        }
-        this.proveedor = this.fallback;
-        this.fallback  = null;
-        return `${this.proveedor.nombre} (fallback)`;
-      }
+    } catch (err) {
+      console.error(`[vision] No se pudo cargar ${this.proveedor.nombre}:`, err);
       throw new Error(MENSAJE_ERROR_MODELO);
     }
   }
@@ -310,13 +233,9 @@ export class GestorVision {
 // HELPERS
 // ----------------------------------------------------------------
 
-/** Mensaje mostrado al usuario cuando ningún modelo de detección puede cargarse. */
+/** Mensaje mostrado al usuario cuando el modelo de detección no puede cargarse. */
 export const MENSAJE_ERROR_MODELO =
   'No se pudo cargar el modelo de detección. Revisa la conexión e inténtalo de nuevo.';
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(r => setTimeout(r, ms));
-}
 
 function capitalizar(s: string): string {
   if (!s || s.length === 0) return s;
@@ -328,7 +247,6 @@ function capitalizar(s: string): string {
 // Usada desde app.ts para evitar múltiples cargados de modelo
 // ----------------------------------------------------------------
 export const gestorVision = new GestorVision(
-  new CocoSsdProvider(),
-  new MobileNetProvider(),
-  { minInferenceMs: 1200, minConfianza: 0.55, cooldownDeduplicacionMs: 5000 }
+  new YoloxProvider(),
+  { minInferenceMs: 1200, minConfianza: CONFIANZA_MINIMA, cooldownDeduplicacionMs: 5000 }
 );

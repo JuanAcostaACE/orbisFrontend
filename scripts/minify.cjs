@@ -3,7 +3,7 @@
  * scripts/minify.cjs
  *
  * Bundle + minificación con Terser.
- * Combina dist/vision.js + dist/app.js en un único app.js en la raíz.
+ * Combina dist/yolo.js + dist/vision.js + dist/app.js en un único app.js en la raíz.
  * El import('dist/vision.js') en app.ts se resuelve inlineando el módulo.
  *
  * SEGURIDAD Y TRANSPARENCIA:
@@ -27,8 +27,8 @@ const path = require('path');
 const DIST   = path.join(__dirname, '..', 'dist');
 const OUTPUT = path.join(__dirname, '..', 'app.js');
 
-// Orden de concatenación: vision primero (lo importa app)
-const ARCHIVOS = ['vision.js', 'alertas.js', 'app.js'];
+// Orden de concatenación: yolo y vision primero (los importan vision y app)
+const ARCHIVOS = ['yolo.js', 'vision.js', 'alertas.js', 'app.js'];
 
 async function run() {
   const faltantes = ARCHIVOS.filter(f => !fs.existsSync(path.join(DIST, f)));
