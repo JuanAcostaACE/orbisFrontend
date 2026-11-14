@@ -10,7 +10,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <!-- defer conserva el orden de ejecución; SRI verifica que el archivo no fue alterado -->
   <script defer crossorigin="anonymous" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <!-- ONNX Runtime Web 1.20.1: ejecuta YOLOX-Nano (detección 2D con bounding boxes) en el navegador; SRI verifica el archivo -->
+  <!-- TensorFlow.js 4.20.0 + COCO-SSD 2.2.3: detector POR DEFECTO; SRI verifica los archivos -->
+  <script defer crossorigin="anonymous" integrity="sha384-xc4sZTUOM2obsQR75Be0zGbt7Gb6mOVFJN4yBm30Xn0YQLDWIY+yrtFmLmIank6w" src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script defer crossorigin="anonymous" integrity="sha384-7qLdgfEQyO9ZQi9ArRHigK+IBto4XPk468jAqc+fnsXaZIcMAhQeLwzggRK7aESl" src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+  <!-- ONNX Runtime Web 1.20.1: solo para YOLOX-Nano experimental (?detector=yolox); SRI verifica el archivo -->
   <script defer crossorigin="anonymous" integrity="sha384-RPL/K8tc0JVaNWsunkEmCzLeieefvFX2UCRLKLmLVChCI6P+CTKhzqF7VIeCc3Zp" src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
 
   <link rel="stylesheet" href="style.css" />

@@ -362,7 +362,7 @@ function iniciarDashboard(): void {
 async function cargarModeloIA(): Promise<void> {
   const statusEl = getElOrNull('ia-status');
   try {
-    if (statusEl) statusEl.textContent = 'Cargando modelo IA (YOLOX-Nano, ~3,6MB)...';
+    if (statusEl) statusEl.textContent = `Cargando modelo IA (${gestorVision.nombreProveedor()})...`;
     const nombreCargado = await gestorVision.inicializarAsync();
     if (statusEl) {
       statusEl.textContent = `Modelo ${nombreCargado} listo ✓`;
@@ -428,7 +428,7 @@ function mensajeSinEvento(r: ResultadoInferencia): string | null {
 }
 
 // ----------------------------------------------------------------
-// OVERLAY DE BOUNDING BOXES (YOLOX-Nano) sobre el video
+// OVERLAY DE BOUNDING BOXES (detector activo) sobre el video
 // ----------------------------------------------------------------
 function limpiarOverlay(): void {
   if (overlayTimer !== null) { clearTimeout(overlayTimer); overlayTimer = null; }
@@ -895,7 +895,7 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
         if (fi?.files?.[0]) dataUrl = await imagenABase64(fi.files[0]);
       }
       if (dataUrl) {
-        simResult.textContent = 'Analizando con IA (YOLOX-Nano)...';
+        simResult.textContent = `Analizando con IA (${gestorVision.nombreProveedor()})...`;
         try {
           const analisis = await analizarConIA(dataUrl, distancia);
           const aviso = mensajeSinEvento(analisis);

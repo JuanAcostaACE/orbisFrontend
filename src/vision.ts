@@ -3,7 +3,9 @@
    TypeScript compilado a dist/vision.js por tsc
 
    ARQUITECTURA:
-   VisionProvider (interfaz) ← YoloxProvider (YOLOX-Nano, ONNX Runtime Web)
+   VisionProvider (interfaz) ← CocoSsdProvider (POR DEFECTO, TF.js COCO-SSD)
+                             ← YoloxProvider (experimental, YOLOX-Nano, ONNX Runtime Web)
+   Selección: DETECTOR_POR_DEFECTO ('coco') o parámetro de URL ?detector=yolox
 
    CONTROL DE SATURACIÓN:
    - Mutex inferenciaEnCurso: evita llamadas paralelas
@@ -13,6 +15,8 @@
    ================================================================ */
 
 import { YoloxNano, CONFIANZA_MINIMA } from './yolo.js';
+
+declare const cocoSsd: any;    // CDN @tensorflow-models/coco-ssd (index.html, con SRI)
 
 // ----------------------------------------------------------------
 // INTERFACES PÚBLICAS
@@ -80,6 +84,69 @@ export class YoloxProvider implements VisionProvider {
   liberar(): void {
     this.yolo.liberar();
   }
+}
+
+// ----------------------------------------------------------------
+// PROVEEDOR POR DEFECTO: COCO-SSD (TF.js, lite_mobilenet_v2)
+// Bounding boxes [x, y, w, h] en píxeles del frame recibido (ImageBitmap/canvas/video).
+// ----------------------------------------------------------------
+
+export class CocoSsdProvider implements VisionProvider {
+  readonly nombre = 'COCO-SSD';
+  private modelo: any | null = null;
+  private carga: Promise<void> | null = null;
+
+  listo(): boolean { return this.modelo !== null; }
+
+  inicializar(): Promise<void> {
+    if (this.modelo) return Promise.resolve();
+    if (!this.carga) {
+      this.carga = (async (): Promise<void> => {
+        if (typeof cocoSsd === 'undefined') throw new Error('COCO-SSD no está cargado (script del CDN bloqueado o sin red)');
+        this.modelo = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+      })().finally(() => { this.carga = null; });
+    }
+    return this.carga;
+  }
+
+  async inferir(
+    elem: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement | ImageBitmap
+  ): Promise<Deteccion[]> {
+    if (!this.modelo) throw new Error('CocoSsdProvider: modelo no inicializado');
+    const predicciones = await this.modelo.detect(elem) as Array<{
+      class: string; score: number; bbox: [number, number, number, number];
+    }>;
+    const ts = performance.now();
+    return predicciones.map(p => ({
+      clase:     capitalizar(p.class),
+      confianza: p.score,
+      bbox:      p.bbox,
+      timestamp: ts
+    }));
+  }
+
+  liberar(): void {
+    this.modelo = null;
+  }
+}
+
+// ----------------------------------------------------------------
+// SELECCIÓN DE DETECTOR
+// ----------------------------------------------------------------
+
+export type NombreDetector = 'coco' | 'yolox';
+
+/** Detector por defecto. Para probar YOLOX-Nano: abrir la app con ?detector=yolox */
+export const DETECTOR_POR_DEFECTO: NombreDetector = 'coco';
+
+/** Resuelve el detector a partir de una query string (p. ej. location.search); valor inválido -> defecto. */
+export function seleccionarDetector(query: string, porDefecto: NombreDetector = DETECTOR_POR_DEFECTO): NombreDetector {
+  const v = new URLSearchParams(query).get('detector')?.toLowerCase();
+  return v === 'coco' || v === 'yolox' ? v : porDefecto;
+}
+
+export function crearProveedor(nombre: NombreDetector): VisionProvider {
+  return nombre === 'yolox' ? new YoloxProvider() : new CocoSsdProvider();
 }
 
 // ----------------------------------------------------------------
@@ -164,6 +231,9 @@ export class GestorVision {
   }
 
   listo(): boolean { return this.proveedor.listo(); }
+
+  /** Nombre del proveedor activo (para la UI). */
+  nombreProveedor(): string { return this.proveedor.nombre; }
 
   /**
    * Ejecuta inferencia con control de saturación y deduplicación.
@@ -263,6 +333,6 @@ function capitalizar(s: string): string {
 // Usada desde app.ts para evitar múltiples cargados de modelo
 // ----------------------------------------------------------------
 export const gestorVision = new GestorVision(
-  new YoloxProvider(),
+  crearProveedor(seleccionarDetector(typeof location !== 'undefined' ? location.search : '')),
   { minInferenceMs: 1200, minConfianza: CONFIANZA_MINIMA, cooldownDeduplicacionMs: 5000 }
 );
