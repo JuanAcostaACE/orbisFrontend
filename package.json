@@ -7,7 +7,7 @@
     "build:ts": "tsc",
     "watch": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "test": "tsc && node tests/yolo.decode.test.mjs"
+    "test": "tsc && node tests/yolo.decode.test.mjs && node tests/vision.gestor.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.4.5",

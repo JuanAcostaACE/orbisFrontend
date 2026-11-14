@@ -887,6 +887,8 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
 
   try {
     let etiquetasIA: string | null = null;
+    // Detección IA válida que se enviará; su cooldown de duplicados se registra solo tras un POST correcto
+    let analisisEnviado: ResultadoInferencia | null = null;
 
     if (modo === 'ACTIVO') {
       let dataUrl: string | null = null;
@@ -908,7 +910,10 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
             simResult.classList.add('info');
             return;
           }
-          if (analisis.estado === 'ok') etiquetasIA = analisis.etiquetasFormateadas || null;
+          if (analisis.estado === 'ok') {
+            etiquetasIA   = analisis.etiquetasFormateadas || null;
+            analisisEnviado = analisis;
+          }
         } catch (iaErr) {
           // Error de análisis: no se envía evento al backend; se informa al usuario
           const msgErr = (iaErr as Error).message;
@@ -931,6 +936,8 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
 
     if (res.status === 401) { await logout(); return; }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // Envío correcto: ahora sí registrar el cooldown de duplicados
+    if (analisisEnviado) gestorVision.confirmarEnvio(analisisEnviado);
 
     const data = await res.json() as EventoResponse;
     simResult.classList.add('success');
