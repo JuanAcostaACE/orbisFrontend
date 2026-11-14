@@ -170,22 +170,36 @@
 
             <!-- CÁMARA / IMAGEN (solo modo ACTIVO) -->
             <div id="grupo-camara" class="hidden">
-              <div id="ia-status" style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem;text-align:center">⏳ Cargando modelo IA...</div>
+              <div id="ia-status" role="status" aria-live="polite" style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem;text-align:center">⏳ Cargando modelo IA...</div>
               <div class="img-source-tabs">
                 <button class="src-btn active" id="btn-src-cam">📷 Cámara en vivo</button>
                 <button class="src-btn" id="btn-src-file">📁 Subir foto</button>
               </div>
               <div id="panel-cam">
+                <div class="cam-selector">
+                  <label for="cam-select">Cámara</label>
+                  <select id="cam-select" class="form-input" aria-describedby="cam-info"></select>
+                </div>
                 <div class="cam-wrap">
                   <video id="cam-video" class="cam-video" autoplay playsinline muted aria-label="Vista de cámara"></video>
                   <canvas id="cam-overlay" class="cam-overlay" aria-hidden="true"></canvas>
                 </div>
                 <canvas id="cam-canvas" class="hidden" aria-hidden="true"></canvas>
                 <div class="cam-controls">
-                  <button id="btn-cam-start" class="btn-cam-action">▶ Iniciar cámara</button>
-                  <button id="btn-cam-stop" class="btn-cam-action danger hidden">⏹ Detener</button>
+                  <button type="button" id="btn-cam-start" class="btn-cam-action">▶ Iniciar cámara</button>
+                  <button type="button" id="btn-cam-stop" class="btn-cam-action danger hidden">⏹ Detener</button>
                 </div>
-                <div id="cam-status" class="cam-status">Cámara inactiva</div>
+                <div id="cam-status" class="cam-status" data-estado="sin-camara" role="status" aria-live="polite">
+                  <span id="cam-status-icon" class="cam-status-icon" aria-hidden="true">○</span>
+                  <span id="cam-status-text">Sin cámara seleccionada</span>
+                </div>
+                <div id="cam-acciones" class="cam-acciones hidden">
+                  <button type="button" id="btn-cam-retry" class="btn-cam-action">↻ Reintentar</button>
+                  <button type="button" id="btn-cam-choose" class="btn-cam-action">Elegir otra cámara</button>
+                </div>
+                <div id="cam-info" class="cam-info">
+                  Dispositivo: <span id="cam-device">—</span> · Resolución: <span id="cam-resolution">—</span>
+                </div>
               </div>
               <div id="panel-file" class="hidden">
                 <input type="file" id="sim-imagen" accept="image/*" class="form-input" aria-label="Seleccionar imagen" />
