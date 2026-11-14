@@ -346,13 +346,13 @@ function iniciarDashboard(): void {
 }
 
 // ----------------------------------------------------------------
-// IA CON COCO-SSD (primario) + MobileNet (fallback)
+// IA CON YOLOX-Nano (ONNX Runtime Web)
 // Gestionado por GestorVision en vision.ts
 // ----------------------------------------------------------------
 async function cargarModeloIA(): Promise<void> {
   const statusEl = getElOrNull('ia-status');
   try {
-    if (statusEl) statusEl.textContent = 'Cargando modelo IA (COCO-SSD, ~6MB)...';
+    if (statusEl) statusEl.textContent = 'Cargando modelo IA (YOLOX-Nano, ~3,6MB)...';
     const nombreCargado = await gestorVision.inicializarAsync();
     if (statusEl) {
       statusEl.textContent = `Modelo ${nombreCargado} listo ✓`;
@@ -414,7 +414,7 @@ function mensajeSinEvento(r: ResultadoInferencia): string | null {
 }
 
 // ----------------------------------------------------------------
-// OVERLAY DE BOUNDING BOXES (COCO-SSD) sobre el video
+// OVERLAY DE BOUNDING BOXES (YOLOX-Nano) sobre el video
 // ----------------------------------------------------------------
 function limpiarOverlay(): void {
   if (overlayTimer !== null) { clearTimeout(overlayTimer); overlayTimer = null; }
@@ -898,7 +898,7 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
         if (fi?.files?.[0]) dataUrl = await imagenABase64(fi.files[0]);
       }
       if (dataUrl) {
-        simResult.textContent = 'Analizando con IA (COCO-SSD)...';
+        simResult.textContent = 'Analizando con IA (YOLOX-Nano)...';
         try {
           const analisis = await analizarConIA(dataUrl, distancia);
           const aviso = mensajeSinEvento(analisis);
