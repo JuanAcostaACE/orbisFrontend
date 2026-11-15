@@ -5,7 +5,7 @@
    ================================================================ */
 
 import { BrowserCameraSource, liberarFrame, type VideoSource, type FrameVideo } from './sources.js';
-import { ejecutarCambioCamara } from './secuencia.js';
+import { ejecutarCambioCamara, compuertaCamara } from './secuencia.js';
 import { camaraSoportada, listarCamaras, leerPreferencia, guardarPreferencia, resolverSeleccion, solicitarPermisoParaEtiquetas, traducirErrorCamara, type CamaraInfo } from './devices.js';
 
 export type EstadoCamara = 'sin-camara' | 'solicitando' | 'en-vivo' | 'error' | 'desconectada';
@@ -144,6 +144,7 @@ export class ControladorCamara {
    */
   private async arrancar(deviceId: string | null, pedirPermiso: boolean): Promise<void> {
     const mio = ++this.token;
+    compuertaCamara.cerrar();            // desde aquí no se inicia ningún envío/análisis
     this.ocultarAcciones();
     this.fijarEstado('solicitando');
     let id = deviceId;
@@ -179,6 +180,7 @@ export class ControladorCamara {
           this.fijarEstado('en-vivo', caps ? `En vivo — ${caps.label || 'cámara'}` : undefined);
           void this.refrescarLista();    // con permiso ya hay etiquetas reales (la activa se conserva)
         },
+        finTransicion: () => compuertaCamara.abrir(),
         reanudar: () => { this.reanudar = false; this.opc.reanudarDeteccion(); }
       });
     } catch (e) {
@@ -186,6 +188,7 @@ export class ControladorCamara {
       this.fuente.stop();
       this.opc.alCambiarActiva(false);
       this.reanudar = false;              // Auto queda detenido
+      compuertaCamara.abrir();
       this.mostrarError(traducirErrorCamara(e).mensaje, 'error');
     }
   }
@@ -208,6 +211,7 @@ export class ControladorCamara {
   /** @param manual true si lo pidió el usuario: detiene también la detección. */
   detener(manual: boolean): void {
     this.token++;
+    compuertaCamara.abrir();
     if (manual) this.opc.detenerDeteccion();
     this.reanudar = false;
     this.fuente.stop();
@@ -219,6 +223,7 @@ export class ControladorCamara {
 
   private alDesconectar(motivo: string): void {
     this.token++;
+    compuertaCamara.abrir();
     this.opc.detenerDeteccion();
     this.reanudar = false;
     this.fuente.stop();

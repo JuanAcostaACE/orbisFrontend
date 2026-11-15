@@ -44,6 +44,7 @@ import { gestorVision, MENSAJE_ERROR_MODELO, type ResultadoInferencia, type Dete
 import { HisteresisPasiva, nivelDistancia, UMBRAL_CRITICO_CM } from './alertas.js';
 import { registrarCooldownTrasRespuesta } from './envio-pasivo.js';
 import { ControladorCamara } from './camera/selector.js';
+import { compuertaCamara } from './camera/secuencia.js';
 import { liberarFrame, type FrameVideo } from './camera/sources.js';
 
 declare const Chart: any;
@@ -332,7 +333,7 @@ function iniciarDashboard(): void {
     // El "bucle de detección" es el envío Auto (setInterval 5 s): detenerAuto cancela el timer;
     // un envío en vuelo termina, pero no se lanza otro (envioEnCurso + mutex de GestorVision).
     detenerDeteccion: () => { const corria = autoRunning; detenerAuto(); return corria; },
-    reanudarDeteccion: () => { if (!autoRunning) toggleAuto(); },
+    reanudarDeteccion: () => { if (!autoRunning) iniciarAuto(false); },
     // Durante un cambio de cámara no debe haber POST ni inferencia en curso (máx. 5 s de espera)
     esperarEnvioEnCurso: async () => {
       for (let i = 0; i < 100 && envioEnCurso; i++) await new Promise<void>(r => setTimeout(r, 50));
@@ -869,6 +870,7 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
   // Anti-saturación: nunca dos envíos simultáneos, y en PASIVO respeta el cooldown.
   // La alerta local ya se disparó antes y no depende de este envío.
   if (envioEnCurso) return;
+  if (compuertaCamara.bloqueada()) return;   // cambio de cámara en curso: ningún envío ni análisis nuevo
   if (modo === 'PASIVO' && !opts.ignorarCooldown) {
     const restante = histeresis.restanteMs(Date.now());
     if (restante > 0) {
@@ -972,8 +974,19 @@ function toggleAuto(): void {
   if (autoRunning) {
     detenerAuto();
   } else {
+    iniciarAuto(true);
+  }
+}
+
+/**
+ * Arranca Auto. inmediato=true (botón): primer envío ya, como siempre.
+ * inmediato=false (reanudar tras cambio de cámara): sin POST inmediato; el primero llega con el intervalo.
+ */
+function iniciarAuto(inmediato: boolean): void {
+  const btn = getEl('btn-sim-auto');
+  {
     autoRunning = true; btn.textContent = 'Detener auto'; btn.classList.add('btn-danger');
-    void enviarSimulacion({ ignorarCooldown: true });
+    if (inmediato) void enviarSimulacion({ ignorarCooldown: true });
     autoInterval = window.setInterval(() => {
       const modos = ['PASIVO', 'ACTIVO'];
       const sel = getEl('sim-modo') as HTMLSelectElement;
