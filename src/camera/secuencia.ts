@@ -56,3 +56,39 @@ export class CompuertaTransicion {
 }
 
 export const compuertaCamara = new CompuertaTransicion();
+
+// ----------------------------------------------------------------
+// Control de aborto de un envío (se evalúa antes del fetch y tras cada await)
+// ----------------------------------------------------------------
+
+export interface ContextoEnvio {
+  /** El envío lo originó el ciclo de Auto. */
+  auto: boolean;
+  /** Auto sigue activo (detección no detenida). */
+  autoActivo: boolean;
+  sesionAbierta: boolean;
+  /** El envío se basa en un frame de la cámara. */
+  usaCamara: boolean;
+  camaraViva: boolean;
+  /** Época de la compuerta al iniciar el envío y ahora (cambia al parar/desconectar/cambiar). */
+  epocaInicio: number;
+  epocaActual: number;
+  /** Contador de ciclos de Auto: se incrementa al detener Auto; se captura al iniciar cada ciclo. */
+  cicloInicio: number;
+  cicloActual: number;
+  /** Hay un cambio de cámara en curso. */
+  transicion: boolean;
+}
+
+/** Motivo por el que el envío debe abortarse, o null si puede continuar. */
+export function motivoAbortoEnvio(c: ContextoEnvio): string | null {
+  // Solo ciclos de Auto (cualquier fuente, cámara o archivo). Un envío MANUAL ya iniciado no se cancela.
+  if (c.auto && (!c.autoActivo || c.cicloActual !== c.cicloInicio)) return 'la detección se detuvo';
+  if (c.auto && !c.sesionAbierta) return 'la sesión se cerró';
+  if (c.usaCamara) {
+    if (c.transicion) return 'hay un cambio de cámara en curso';
+    if (c.epocaActual !== c.epocaInicio) return 'la cámara se detuvo, cambió o se desconectó';
+    if (!c.camaraViva) return 'la cámara no está activa';
+  }
+  return null;
+}
