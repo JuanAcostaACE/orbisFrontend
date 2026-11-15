@@ -211,6 +211,7 @@ export class ControladorCamara {
   /** @param manual true si lo pidió el usuario: detiene también la detección. */
   detener(manual: boolean): void {
     this.token++;
+    compuertaCamara.invalidar();   // un envío en vuelo sin POST se cancela; Auto ya no lanza otros
     compuertaCamara.abrir();
     if (manual) this.opc.detenerDeteccion();
     this.reanudar = false;
@@ -223,6 +224,7 @@ export class ControladorCamara {
 
   private alDesconectar(motivo: string): void {
     this.token++;
+    compuertaCamara.invalidar();
     compuertaCamara.abrir();
     this.opc.detenerDeteccion();
     this.reanudar = false;

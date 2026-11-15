@@ -880,6 +880,8 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
     }
   }
   envioEnCurso = true;
+  const epocaInicio = compuertaCamara.epoca();   // si cambia antes del POST, la cámara paró/cambió/se desconectó
+  let usaCamara = false;
 
   btn.disabled = true; btn.textContent = 'Procesando...';
   simResult.className = 'sim-result';
@@ -894,6 +896,7 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
     if (modo === 'ACTIVO') {
       let dataUrl: string | null = null;
       if (fuenteImagen === 'cam' && camara?.activa()) {
+        usaCamara = true;
         dataUrl = await capturarFrame();
         if (!dataUrl) throw new Error('No se pudo capturar frame');
       } else if (fuenteImagen === 'file') {
@@ -927,6 +930,13 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
       }
     }
 
+    // Último control antes del POST: un ciclo basado en la cámara no se envía si esta paró,
+    // cambió o se desconectó mientras se analizaba (el evento ya no corresponde a una cámara viva).
+    if (usaCamara && (compuertaCamara.epoca() !== epocaInicio || compuertaCamara.bloqueada())) {
+      simResult.className = 'sim-result info';
+      simResult.textContent = 'Envío cancelado: la cámara se detuvo, cambió o se desconectó.';
+      return;
+    }
 
     const body: EventoRequest = { modo, distanciaCm: distancia, etiquetasIA };
     const res = await apiFetch(EP_EVENTOS, {
