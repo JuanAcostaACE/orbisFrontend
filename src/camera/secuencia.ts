@@ -45,7 +45,12 @@ export async function ejecutarCambioCamara(p: PasosCambioCamara): Promise<'ok' |
  */
 export class CompuertaTransicion {
   private cerrada = false;
-  cerrar(): void { this.cerrada = true; }
+  private generacion = 0;
+  cerrar(): void { this.cerrada = true; this.generacion++; }
+  /** Invalida los envíos ya iniciados que aún no hicieron POST (parada o desconexión de la cámara). */
+  invalidar(): void { this.generacion++; }
+  /** Número de generación: un envío compara el valor de su inicio con el actual antes del POST. */
+  epoca(): number { return this.generacion; }
   abrir(): void { this.cerrada = false; }
   bloqueada(): boolean { return this.cerrada; }
 }

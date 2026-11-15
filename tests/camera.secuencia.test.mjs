@@ -78,4 +78,24 @@ for (const falla of ['iniciar', 'validar']) {
   assert.ok(!gate.bloqueada());
   assert.ok(compuertaCamara instanceof CompuertaTransicion);
 }
+// K3: al parar/desconectar, un ciclo ya iniciado (sin POST aun) queda invalidado; uno nuevo no.
+{
+  const gate = new CompuertaTransicion();
+  let posts = 0;
+  // Mismo patron que enviarSimulacion: captura la epoca al inicio y la revisa justo antes del POST.
+  const ciclo = async (usaCamara, durante) => {
+    const e = gate.epoca();
+    await durante();
+    if (usaCamara && (gate.epoca() !== e || gate.bloqueada())) return 'cancelado';
+    posts++; return 'enviado';
+  };
+  assert.equal(await ciclo(true, async () => gate.invalidar()), 'cancelado');   // desconexion en pleno analisis
+  assert.equal(posts, 0);
+  assert.equal(await ciclo(true, async () => {}), 'enviado');                    // ciclo posterior valido
+  assert.equal(await ciclo(false, async () => gate.invalidar()), 'enviado');     // sin camara (PASIVO/foto): no afectado
+  gate.cerrar();
+  assert.equal(await ciclo(true, async () => {}), 'cancelado');                  // durante una transicion
+  gate.abrir();
+  assert.ok(!gate.bloqueada());
+}
 console.log('OK: secuencia de cambio de camara (orden, fallo deja Auto parado, obsoletos)');
