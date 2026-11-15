@@ -17,6 +17,8 @@ export interface PasosCambioCamara {
   validar(): Promise<void>;
   /** Actualiza la UI a "en vivo" (antes de reanudar). */
   confirmar(): void;
+  /** Cierra la transición (se reabre la compuerta de envíos) justo antes de reanudar. */
+  finTransicion(): void;
   reanudar(): void;
   /** false si un cambio más reciente (o una parada) invalidó este. */
   vigente(): boolean;
@@ -32,6 +34,20 @@ export async function ejecutarCambioCamara(p: PasosCambioCamara): Promise<'ok' |
   await p.validar();
   if (!p.vigente()) return 'obsoleto';
   p.confirmar();
+  p.finTransicion();
   if (reanudar) p.reanudar();
   return 'ok';
 }
+
+/**
+ * Compuerta de transición: mientras está cerrada (cambio de cámara en curso) NO puede iniciarse
+ * ningún envío ni análisis, ni de Auto ni manual. Los envíos ya en vuelo terminan antes de liberar.
+ */
+export class CompuertaTransicion {
+  private cerrada = false;
+  cerrar(): void { this.cerrada = true; }
+  abrir(): void { this.cerrada = false; }
+  bloqueada(): boolean { return this.cerrada; }
+}
+
+export const compuertaCamara = new CompuertaTransicion();
