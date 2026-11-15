@@ -239,7 +239,6 @@ export class ControladorCamara {
 
   private mostrarError(mensaje: string, estado: 'error' | 'desconectada'): void {
     this.fijarEstado(estado, mensaje);
-    elCam('cam-acciones')?.classList.remove('hidden');
   }
 
   private ocultarAcciones(): void { elCam('cam-acciones')?.classList.add('hidden'); }
@@ -251,6 +250,8 @@ export class ControladorCamara {
     const ic = elCam('cam-status-icon'); if (ic) ic.textContent = ICONOS_CAMARA[estado];
     const tx = elCam('cam-status-text'); if (tx) tx.textContent = texto ?? TEXTOS_CAMARA[estado];
     const vivo = estado === 'en-vivo', ocupado = estado === 'solicitando';
+    // Reintentar / Elegir otra cámara dependen SOLO del estado: visibles en error y desconectada
+    elCam('cam-acciones')?.classList.toggle('hidden', estado !== 'error' && estado !== 'desconectada');
     elCam('btn-cam-start')?.classList.toggle('hidden', vivo);
     elCam('btn-cam-stop')?.classList.toggle('hidden', !vivo);
     const bs = elCam<HTMLButtonElement>('btn-cam-start'); if (bs) bs.disabled = ocupado || !camaraSoportada();

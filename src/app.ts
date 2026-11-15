@@ -44,7 +44,7 @@ import { gestorVision, MENSAJE_ERROR_MODELO, type ResultadoInferencia, type Dete
 import { HisteresisPasiva, nivelDistancia, UMBRAL_CRITICO_CM } from './alertas.js';
 import { registrarCooldownTrasRespuesta } from './envio-pasivo.js';
 import { ControladorCamara } from './camera/selector.js';
-import { compuertaCamara } from './camera/secuencia.js';
+import { compuertaCamara, motivoAbortoEnvio } from './camera/secuencia.js';
 import { liberarFrame, type FrameVideo } from './camera/sources.js';
 
 declare const Chart: any;
@@ -87,6 +87,7 @@ let chart: any | null               = null;
 let chartType: 'bar' | 'line'       = 'bar';
 let autoInterval: number | null     = null;
 let autoRunning: boolean            = false;
+let cicloAuto: number               = 0;
 let camara: ControladorCamara | null = null;   // capa de cámara (src/camera/)
 let fuenteImagen: 'cam' | 'file'    = 'cam';
 let usuarioActual: AuthResponse | null = null;
@@ -178,6 +179,7 @@ async function logout(): Promise<void> {
 function mostrarPantallaAuth(): void {
   detenerPolling();
   detenerAuto();          // ninguna sesión termina con envíos automáticos en marcha
+  abortarEnvio(true);     // ni con un fetch en vuelo
   detenerCamara();
   histeresis.reiniciar();
   limpiarPeligro();
@@ -332,7 +334,7 @@ function iniciarDashboard(): void {
   camara = new ControladorCamara({
     // El "bucle de detección" es el envío Auto (setInterval 5 s): detenerAuto cancela el timer;
     // un envío en vuelo termina, pero no se lanza otro (envioEnCurso + mutex de GestorVision).
-    detenerDeteccion: () => { const corria = autoRunning; detenerAuto(); return corria; },
+    detenerDeteccion: () => { const corria = autoRunning; detenerAuto(); abortarEnvio(); return corria; },
     reanudarDeteccion: () => { if (!autoRunning) iniciarAuto(false); },
     // Durante un cambio de cámara no debe haber POST ni inferencia en curso (máx. 5 s de espera)
     esperarEnvioEnCurso: async () => {
@@ -859,9 +861,17 @@ function imagenABase64(file: File): Promise<string> {
   });
 }
 
-interface OpcionesEnvio { ignorarCooldown?: boolean }
+interface OpcionesEnvio { ignorarCooldown?: boolean; auto?: boolean }
+
+// Envío en curso abortable (fetch). Se aborta al parar/desconectar/cambiar la cámara y al cerrar sesión.
+let envioCtl: { ctl: AbortController; auto: boolean; camara: boolean } | null = null;
+function abortarEnvio(incluirManual = false): void {
+  if (envioCtl && (incluirManual || envioCtl.auto || envioCtl.camara)) envioCtl.ctl.abort();
+}
 
 async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
+  // Un ciclo de Auto nunca arranca con la detección detenida o la sesión cerrada
+  if (opts.auto && (!autoRunning || usuarioActual === null)) return;
   const modo      = (getEl('sim-modo')      as HTMLSelectElement).value;
   const distancia = parseFloat((getEl('sim-distancia') as HTMLInputElement).value);
   const btn       = getEl('btn-sim-enviar') as HTMLButtonElement;
@@ -880,8 +890,21 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
     }
   }
   envioEnCurso = true;
+  const cicloInicio = cicloAuto;
   const epocaInicio = compuertaCamara.epoca();   // si cambia antes del POST, la cámara paró/cambió/se desconectó
   let usaCamara = false;
+  const ctl = new AbortController();
+  envioCtl = { ctl, auto: !!opts.auto, camara: false };
+  // Se evalúa justo antes del fetch y después de cada await del ciclo
+  const abortoPor = (): string | null => motivoAbortoEnvio({
+    auto: !!opts.auto, autoActivo: autoRunning, cicloInicio, cicloActual: cicloAuto, sesionAbierta: usuarioActual !== null,
+    usaCamara, camaraViva: !!camara?.activa(),
+    epocaInicio, epocaActual: compuertaCamara.epoca(), transicion: compuertaCamara.bloqueada()
+  });
+  const cancelar = (motivo: string): void => {
+    simResult.className = 'sim-result info';
+    simResult.textContent = `Envío cancelado: ${motivo}.`;
+  };
 
   btn.disabled = true; btn.textContent = 'Procesando...';
   simResult.className = 'sim-result';
@@ -897,7 +920,9 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
       let dataUrl: string | null = null;
       if (fuenteImagen === 'cam' && camara?.activa()) {
         usaCamara = true;
+        if (envioCtl) envioCtl.camara = true;
         dataUrl = await capturarFrame();
+        { const m = abortoPor(); if (m) { cancelar(m); return; } }
         if (!dataUrl) throw new Error('No se pudo capturar frame');
       } else if (fuenteImagen === 'file') {
         const fi = getElOrNull('sim-imagen') as HTMLInputElement | null;
@@ -907,6 +932,7 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
         simResult.textContent = `Analizando con IA (${gestorVision.nombreProveedor()})...`;
         try {
           const analisis = await analizarConIA(dataUrl, distancia);
+          { const m = abortoPor(); if (m) { cancelar(m); return; } }
           const aviso = mensajeSinEvento(analisis);
           if (aviso !== null) {
             // Sin detección válida, duplicado u omitido: no se envía evento vacío al backend
@@ -930,19 +956,16 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
       }
     }
 
-    // Último control antes del POST: un ciclo basado en la cámara no se envía si esta paró,
-    // cambió o se desconectó mientras se analizaba (el evento ya no corresponde a una cámara viva).
-    if (usaCamara && (compuertaCamara.epoca() !== epocaInicio || compuertaCamara.bloqueada())) {
-      simResult.className = 'sim-result info';
-      simResult.textContent = 'Envío cancelado: la cámara se detuvo, cambió o se desconectó.';
-      return;
-    }
+    // Último control antes del fetch: ningún envío nuevo con detección detenida, cámara muerta,
+    // cambio en curso o sesión cerrada.
+    { const m = abortoPor(); if (m) { cancelar(m); return; } }
 
     const body: EventoRequest = { modo, distanciaCm: distancia, etiquetasIA };
     const res = await apiFetch(EP_EVENTOS, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: ctl.signal
     });
 
     if (res.status === 401) { await logout(); return; }
@@ -962,9 +985,14 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
     await cargarEventos();
 
   } catch (e) {
-    simResult.classList.add('error');
-    simResult.textContent = 'Error: ' + (e as Error).message;
+    if ((e as Error).name === 'AbortError') {
+      cancelar('la petición se abortó (cámara detenida, desconectada o sesión cerrada)');
+    } else {
+      simResult.classList.add('error');
+      simResult.textContent = 'Error: ' + (e as Error).message;
+    }
   } finally {
+    if (envioCtl?.ctl === ctl) envioCtl = null;
     envioEnCurso = false;
     btn.disabled = false; btn.textContent = 'Enviar evento';
   }
@@ -972,6 +1000,7 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
 
 /** Detiene el envío automático y restaura el botón. Seguro de llamar aunque no esté activo. */
 function detenerAuto(): void {
+  cicloAuto++;   // invalida los ciclos automáticos ya iniciados que aún no hicieron POST (aunque Auto se reinicie)
   if (autoInterval !== null) { clearInterval(autoInterval); autoInterval = null; }
   if (!autoRunning) return;
   autoRunning = false;
@@ -996,8 +1025,9 @@ function iniciarAuto(inmediato: boolean): void {
   const btn = getEl('btn-sim-auto');
   {
     autoRunning = true; btn.textContent = 'Detener auto'; btn.classList.add('btn-danger');
-    if (inmediato) void enviarSimulacion({ ignorarCooldown: true });
+    if (inmediato) void enviarSimulacion({ ignorarCooldown: true, auto: true });
     autoInterval = window.setInterval(() => {
+      if (!autoRunning) return;   // un tick pendiente nunca actúa con Auto detenido
       const modos = ['PASIVO', 'ACTIVO'];
       const sel = getEl('sim-modo') as HTMLSelectElement;
       sel.value = modos[Math.floor(Math.random() * modos.length)];
@@ -1006,7 +1036,7 @@ function iniciarAuto(inmediato: boolean): void {
       const lbl = getElOrNull('sim-distancia-val');
       if (lbl) lbl.textContent = d + ' cm';
       procesarDistanciaSimulador(d, false);   // alerta local; el envío lo hace el propio intervalo (5 s)
-      void enviarSimulacion({ ignorarCooldown: true });
+      void enviarSimulacion({ ignorarCooldown: true, auto: true });
     }, 5000);
   }
 }
