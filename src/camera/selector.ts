@@ -4,7 +4,8 @@
    No conoce la lógica de detección: la app le inyecta callbacks.
    ================================================================ */
 
-import { BrowserCameraSource, type VideoSource, type FrameVideo } from './sources.js';
+import { BrowserCameraSource, liberarFrame, type VideoSource, type FrameVideo } from './sources.js';
+import { ejecutarCambioCamara } from './secuencia.js';
 import { camaraSoportada, listarCamaras, leerPreferencia, guardarPreferencia, resolverSeleccion, solicitarPermisoParaEtiquetas, traducirErrorCamara, type CamaraInfo } from './devices.js';
 
 export type EstadoCamara = 'sin-camara' | 'solicitando' | 'en-vivo' | 'error' | 'desconectada';
@@ -23,6 +24,8 @@ const TEXTOS_CAMARA: Record<EstadoCamara, string> = {
 export interface OpcionesControladorCamara {
   /** Detiene el bucle de detección (timer incluido). Devuelve true si estaba corriendo. */
   detenerDeteccion: () => boolean;
+  /** Resuelve cuando no hay envío/inferencia en curso (el que está en vuelo termina). */
+  esperarEnvioEnCurso: () => Promise<void>;
   /** Reanuda la detección (solo se llama si estaba corriendo antes del cambio). */
   reanudarDeteccion: () => void;
   /** Notifica que la cámara pasó a estar activa/inactiva (limpiar overlay, etc.). */
@@ -136,45 +139,70 @@ export class ControladorCamara {
   // ---------------- Arranque / cambio / parada ----------------
 
   /**
-   * Secuencia de cambio: 1) parar detección (y recordar si corría); 2) fuente.stop():
-   * detiene TODAS las pistas y pone srcObject=null; 3) arrancar la nueva; 4) reanudar
-   * detección solo si corría. Un token descarta arranques obsoletos.
+   * Cambio/arranque de cámara: ver ejecutarCambioCamara (secuencia.ts). Si falla, la detección
+   * queda detenida (no se reanuda), se muestra el error y las acciones Reintentar/Elegir otra.
    */
   private async arrancar(deviceId: string | null, pedirPermiso: boolean): Promise<void> {
     const mio = ++this.token;
-    this.reanudar = this.opc.detenerDeteccion() || this.reanudar;
-    this.fuente.stop();
-    this.opc.alCambiarActiva(false);
-    this.deviceActivo = '';
     this.ocultarAcciones();
     this.fijarEstado('solicitando');
+    let id = deviceId;
     try {
-      let id = deviceId;
-      // Sin permiso las etiquetas son genéricas: pedirlo una vez para poder elegir la C920/Logitech
-      if (pedirPermiso && this.camaras.length > 1 && !this.camaras.some(c => c.etiquetaReal) && !leerPreferencia()) {
-        await solicitarPermisoParaEtiquetas();
-        if (mio !== this.token) return;
-        await this.refrescarLista();
-        id = this.select.value || null;
-      }
-      await this.fuente.start(id || undefined);
-      if (mio !== this.token) return;
-      const caps = this.fuente.capabilities;
-      this.deviceActivo = id ?? '';
-      if (id) guardarPreferencia(id);
-      await this.refrescarLista();       // con permiso ya hay etiquetas reales
-      if (mio !== this.token) return;
-      if (id && this.camaras.some(c => c.deviceId === id)) this.select.value = id;
-      this.opc.alCambiarActiva(true);
-      this.fijarEstado('en-vivo', caps ? `En vivo — ${caps.label || 'cámara'}` : undefined);
-      if (this.reanudar) { this.reanudar = false; this.opc.reanudarDeteccion(); }
+      await ejecutarCambioCamara({
+        // Fusiona de inmediato con el flag: un cambio posterior no pierde "Auto estaba activo"
+        detenerDeteccion: () => { this.reanudar = this.opc.detenerDeteccion() || this.reanudar; return this.reanudar; },
+        esperarEnvioEnCurso: () => this.opc.esperarEnvioEnCurso(),
+        vigente: () => mio === this.token,
+        liberar: () => {
+          this.fuente.stop();
+          this.opc.alCambiarActiva(false);
+          this.deviceActivo = '';
+        },
+        iniciar: async () => {
+          // Sin permiso las etiquetas son genéricas: pedirlo una vez para poder elegir la C920/Logitech
+          if (pedirPermiso && this.camaras.length > 1 && !this.camaras.some(c => c.etiquetaReal) && !leerPreferencia()) {
+            await solicitarPermisoParaEtiquetas();
+            if (mio !== this.token) return;
+            await this.refrescarLista();
+            id = this.select.value || null;
+          }
+          if (mio !== this.token) return;
+          await this.fuente.start(id || undefined);
+        },
+        validar: () => this.validarFuente(),
+        confirmar: () => {
+          this.deviceActivo = id ?? '';
+          if (id) guardarPreferencia(id);
+          if (id && this.camaras.some(c => c.deviceId === id)) this.select.value = id;
+          this.opc.alCambiarActiva(true);
+          const caps = this.fuente.capabilities;
+          this.fijarEstado('en-vivo', caps ? `En vivo — ${caps.label || 'cámara'}` : undefined);
+          void this.refrescarLista();    // con permiso ya hay etiquetas reales (la activa se conserva)
+        },
+        reanudar: () => { this.reanudar = false; this.opc.reanudarDeteccion(); }
+      });
     } catch (e) {
       if (mio !== this.token) return;     // arranque cancelado por uno más reciente
       this.fuente.stop();
-      this.reanudar = false;
-      const err = traducirErrorCamara(e);
-      this.mostrarError(err.mensaje, 'error');
+      this.opc.alCambiarActiva(false);
+      this.reanudar = false;              // Auto queda detenido
+      this.mostrarError(traducirErrorCamara(e).mensaje, 'error');
     }
+  }
+
+  /** La fuente debe dar settings (resolución) y un primer frame válido en un tiempo razonable. */
+  private async validarFuente(): Promise<void> {
+    const limite = Date.now() + 3000;
+    while (Date.now() < limite) {
+      const f = await this.fuente.getFrame();
+      if (f) {
+        const ok = f.width > 0 && f.height > 0;
+        liberarFrame(f);
+        if (ok) return;
+      }
+      await new Promise<void>(r => setTimeout(r, 100));
+    }
+    throw Object.assign(new Error('La cámara no entregó imagen'), { name: 'NotReadableError' });
   }
 
   /** @param manual true si lo pidió el usuario: detiene también la detección. */

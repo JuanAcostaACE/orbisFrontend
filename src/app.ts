@@ -333,6 +333,10 @@ function iniciarDashboard(): void {
     // un envío en vuelo termina, pero no se lanza otro (envioEnCurso + mutex de GestorVision).
     detenerDeteccion: () => { const corria = autoRunning; detenerAuto(); return corria; },
     reanudarDeteccion: () => { if (!autoRunning) toggleAuto(); },
+    // Durante un cambio de cámara no debe haber POST ni inferencia en curso (máx. 5 s de espera)
+    esperarEnvioEnCurso: async () => {
+      for (let i = 0; i < 100 && envioEnCurso; i++) await new Promise<void>(r => setTimeout(r, 50));
+    },
     alCambiarActiva: (activa) => { if (!activa) limpiarOverlay(); }
   });
   void camara.iniciar();
