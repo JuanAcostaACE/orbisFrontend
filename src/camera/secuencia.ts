@@ -92,3 +92,11 @@ export function motivoAbortoEnvio(c: ContextoEnvio): string | null {
   }
   return null;
 }
+
+/**
+ * Regla de cadencia de Auto: un tick con un ciclo aún en vuelo (análisis IA + POST + refresco) se SALTA
+ * por completo (ni se encola ni cambia modo/distancia simulados); no puede haber dos ciclos a la vez.
+ */
+export function debeSaltarTickAuto(envioEnCurso: boolean): boolean {
+  return envioEnCurso;
+}

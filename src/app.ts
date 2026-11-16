@@ -44,7 +44,7 @@ import { gestorVision, MENSAJE_ERROR_MODELO, type ResultadoInferencia, type Dete
 import { HisteresisPasiva, nivelDistancia, UMBRAL_CRITICO_CM } from './alertas.js';
 import { registrarCooldownTrasRespuesta } from './envio-pasivo.js';
 import { ControladorCamara } from './camera/selector.js';
-import { compuertaCamara, motivoAbortoEnvio } from './camera/secuencia.js';
+import { compuertaCamara, motivoAbortoEnvio, debeSaltarTickAuto } from './camera/secuencia.js';
 import { liberarFrame, type FrameVideo } from './camera/sources.js';
 
 declare const Chart: any;
@@ -1028,6 +1028,7 @@ function iniciarAuto(inmediato: boolean): void {
     if (inmediato) void enviarSimulacion({ ignorarCooldown: true, auto: true });
     autoInterval = window.setInterval(() => {
       if (!autoRunning) return;   // un tick pendiente nunca actúa con Auto detenido
+      if (debeSaltarTickAuto(envioEnCurso)) return;   // ciclo anterior aún en vuelo: se salta, no se encola
       const modos = ['PASIVO', 'ACTIVO'];
       const sel = getEl('sim-modo') as HTMLSelectElement;
       sel.value = modos[Math.floor(Math.random() * modos.length)];
