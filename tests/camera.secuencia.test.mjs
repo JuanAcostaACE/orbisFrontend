@@ -1,6 +1,6 @@
 // Pruebas sin DOM de la secuencia de cambio de camara. Uso: npm test (dist/).
 import assert from 'node:assert/strict';
-import { ejecutarCambioCamara, compuertaCamara, CompuertaTransicion } from '../dist/camera/secuencia.js';
+import { ejecutarCambioCamara, compuertaCamara, CompuertaTransicion, debeSaltarTickAuto } from '../dist/camera/secuencia.js';
 
 function pasos(log, { autoCorria = true, falla = null, vigenteHasta = Infinity } = {}) {
   let n = 0;
@@ -99,3 +99,7 @@ for (const falla of ['iniciar', 'validar']) {
   assert.ok(!gate.bloqueada());
 }
 console.log('OK: secuencia de cambio de camara (orden, fallo deja Auto parado, obsoletos)');
+
+// Regla de cadencia Auto: tick con ciclo en vuelo se salta; sin ciclo en vuelo se ejecuta
+assert.equal(debeSaltarTickAuto(true), true);
+assert.equal(debeSaltarTickAuto(false), false);
