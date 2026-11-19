@@ -355,13 +355,13 @@ async function cargarModeloIA(): Promise<void> {
     if (statusEl) statusEl.textContent = 'Cargando modelo IA (COCO-SSD, ~6MB)...';
     const nombreCargado = await gestorVision.inicializarAsync();
     if (statusEl) {
-      statusEl.textContent = `Modelo ${nombreCargado} listo ✓`;
-      (statusEl as HTMLElement).style.color = '#22c55e';
+      statusEl.textContent = `Modelo ${nombreCargado} listo`;
+      (statusEl as HTMLElement).style.color = '#2DD4BF';
     }
   } catch (e) {
     if (statusEl) {
       statusEl.textContent = 'Error al cargar modelo IA';
-      (statusEl as HTMLElement).style.color = '#ef4444';
+      (statusEl as HTMLElement).style.color = '#F87171';
     }
     throw e;
   }
@@ -451,14 +451,14 @@ function dibujarDetecciones(dets: Deteccion[]): void {
     if (!d.bbox) return;
     const [x, y, w, h] = d.bbox;
     const rx = offX + x * escala, ry = offY + y * escala;
-    ctx.strokeStyle = '#fde047';
+    ctx.strokeStyle = '#F5B94A';
     ctx.strokeRect(rx, ry, w * escala, h * escala);
     const etiqueta = `${d.clase} ${Math.round(d.confianza * 100)}%`;
     const tw = ctx.measureText(etiqueta).width + 8;
     const ty = Math.max(0, ry - 18);
     ctx.fillStyle = '#000';
     ctx.fillRect(rx, ty, tw, 18);
-    ctx.fillStyle = '#fde047';
+    ctx.fillStyle = '#F5B94A';
     ctx.fillText(etiqueta, rx + 4, ty + 2);
   });
 
@@ -593,8 +593,8 @@ function togglePolling(): void {
   const btn = getEl('btn-poll-toggle');
   btn.setAttribute('aria-pressed', String(pollPausado));
   btn.textContent = pollPausado
-    ? '▶ Reanudar actualización automática'
-    : '⏸ Pausar actualización automática';
+    ? 'Reanudar actualización automática'
+    : 'Pausar actualización automática';
   if (pollPausado) {
     detenerPolling();
   } else {
@@ -640,8 +640,8 @@ function anunciarPeligro(distancia: number): void {
   const nivel = nivelDistancia(distancia);
   if (el) {
     el.textContent = nivel === 'CRITICO'
-      ? `⛔ PELIGRO CRÍTICO: obstáculo a ${distancia} cm`
-      : `⚠ PELIGRO: obstáculo a ${distancia} cm`;
+      ? `PELIGRO CRÍTICO: obstáculo a ${distancia} cm`
+      : `PELIGRO: obstáculo a ${distancia} cm`;
   }
   beepLocal();
 }
@@ -746,8 +746,7 @@ function renderTabla(): void {
     const badge  = document.createElement('span');
     badge.className = 'badge-modo';
     badge.setAttribute('data-modo', (e.modo ?? '').toUpperCase());
-    const iconoModo = (e.modo ?? '').toUpperCase() === 'ACTIVO' ? '📷' : '📡';
-    badge.textContent = `${iconoModo} ${e.modo ?? '--'}`;
+    badge.textContent = e.modo ?? '--';
     tdModo.appendChild(badge);
     tr.appendChild(tdModo);
 
@@ -760,7 +759,7 @@ function renderTabla(): void {
       const nb = document.createElement('span');
       nb.className = 'badge-dist';
       nb.setAttribute('data-nivel', nivel);
-      nb.textContent = nivel === 'CRITICO' ? '⛔ CRÍTICO' : nivel === 'PELIGRO' ? '⚠ PELIGRO' : '✔ SEGURO';
+      nb.textContent = nivel === 'CRITICO' ? 'CRÍTICO' : nivel === 'PELIGRO' ? 'PELIGRO' : 'SEGURO';
       tdDist.appendChild(nb);
     } else {
       tdDist.textContent = '--';
@@ -778,7 +777,7 @@ function renderTabla(): void {
                     !e.etiquetasIA.startsWith('ERROR');
     if (tieneIA && e.etiquetasIA) {
       const btn = document.createElement('button');
-      btn.className = 'btn-voz'; btn.textContent = '🔊';
+      btn.className = 'btn-voz'; btn.textContent = 'Leer';
       btn.setAttribute('aria-label', 'Leer etiquetas en voz alta');
       const textoVoz = e.etiquetasIA;
       btn.addEventListener('click', () => leerVoz(textoVoz, btn));
@@ -821,19 +820,19 @@ function renderChart(eventos: EventoResponse[]): void {
     data: {
       labels,
       datasets: [
-        { label: 'Pasivo', data: pasivos, backgroundColor: 'rgba(34,197,94,0.7)',  borderColor: 'rgba(34,197,94,1)',  borderWidth: 2, fill: chartType === 'line', tension: 0.4 },
-        { label: 'Activo', data: activos, backgroundColor: 'rgba(99,102,241,0.7)', borderColor: 'rgba(99,102,241,1)', borderWidth: 2, fill: chartType === 'line', tension: 0.4 }
+        { label: 'Pasivo', data: pasivos, backgroundColor: 'rgba(45,212,191,0.75)',  borderColor: '#2DD4BF',  borderWidth: 2, fill: chartType === 'line', tension: 0.4 },
+        { label: 'Activo', data: activos, backgroundColor: 'rgba(143,184,232,0.7)', borderColor: '#8FB8E8', borderWidth: 2, fill: chartType === 'line', tension: 0.4 }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend:  { labels:  { color: '#cbd5e1', font: { family: 'Inter', size: 12 } } },
-        tooltip: { backgroundColor: '#1e293b', titleColor: '#f1f5f9', bodyColor: '#94a3b8' }
+        legend:  { labels:  { color: '#C5D3E4', font: { family: 'Inter', size: 12 } } },
+        tooltip: { backgroundColor: '#1A2639', titleColor: '#EAF2FB', bodyColor: '#A3B4C9' }
       },
       scales: {
-        x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { ticks: { color: '#64748b', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+        x: { ticks: { color: '#8A9BB3' }, grid: { color: 'rgba(234,242,251,0.07)' } },
+        y: { ticks: { color: '#8A9BB3', stepSize: 1 }, grid: { color: 'rgba(234,242,251,0.07)' }, beginAtZero: true }
       }
     }
   });
@@ -989,9 +988,9 @@ function leerVoz(texto: string, btn: HTMLButtonElement): void {
   if (synth.speaking) { synth.cancel(); return; }
   const u = new SpeechSynthesisUtterance(`Obstáculo identificado: ${texto}`);
   u.lang = 'es-ES'; u.rate = 0.9;
-  u.onstart = (): void => { btn.textContent = '⏹'; };
-  u.onend   = (): void => { btn.textContent = '🔊'; };
-  u.onerror = (): void => { btn.textContent = '🔊'; };
+  u.onstart = (): void => { btn.textContent = 'Parar'; };
+  u.onend   = (): void => { btn.textContent = 'Leer'; };
+  u.onerror = (): void => { btn.textContent = 'Leer'; };
   synth.speak(u);
 }
 
