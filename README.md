@@ -27,18 +27,22 @@ Orbis Frontend es una aplicacion web estatica (HTML + CSS + TypeScript compilado
 
 ## Instalacion
 
-No requiere instalacion de dependencias. Es un sitio estatico puro.
+El sitio publicado es estatico, pero el codigo fuente esta en TypeScript y se compila con Node 20 o superior.
 
-1. Clona el repositorio:
+1. Clona el repositorio e instala las dependencias de desarrollo:
    ```bash
    git clone https://github.com/JuanAcostaACE/orbisFrontend.git
    cd orbisFrontend
+   npm ci
    ```
 
-2. **Configura la URL del backend** (ver seccion siguiente).
+2. Compila y ejecuta los tests:
+   ```bash
+   npm run build   # src/*.ts -> app.js
+   npm test        # tests unitarios de test/
+   ```
 
-3. Abre index.html en tu navegador, o deployalo en Vercel.
-
+3. Sirve la carpeta con un servidor HTTP (ver "Ejecutar localmente").
 ---
 
 ## Configuracion de la URL del backend
