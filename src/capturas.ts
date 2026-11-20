@@ -96,7 +96,7 @@ function capMostrarVista(vista: 'cargando' | 'vacio' | 'error' | 'lista'): void 
   capEl('cap-contenido')?.setAttribute('aria-busy', vista === 'cargando' ? 'true' : 'false');
 }
 
-function capMensajeError(status: number | null, e?: unknown): string {
+export function capMensajeError(status: number | null, e?: unknown): string {
   if (status === 403) return 'No tienes permiso para ver las capturas.';
   if (status === 404) return 'El servicio de capturas no está disponible todavía.';
   if (status !== null && status >= 500) return `El servidor tuvo un problema al listar las capturas (error ${status}). Se reintentará automáticamente.`;
@@ -119,7 +119,7 @@ function capMostrarError(msg: string): void {
   }
 }
 
-function capIdCorto(id: string | number): string {
+export function capIdCorto(id: string | number): string {
   const s = String(id);
   return s.length > 8 ? s.slice(0, 8) : s;
 }
