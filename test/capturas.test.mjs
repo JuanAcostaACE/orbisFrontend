@@ -25,3 +25,16 @@ test('fechaRelativa: segundos, minutos y horas', () => {
   assert.equal(fechaRelativa(hace(60 * 60_000), AHORA), 'hace 1 h');
   assert.equal(fechaRelativa(hace(23 * 3_600_000), AHORA), 'hace 23 h');
 });
+
+test('fechaRelativa: días en singular y plural', () => {
+  const DIA = 86_400_000;
+  assert.equal(fechaRelativa(hace(DIA), AHORA), 'hace 1 día');
+  assert.equal(fechaRelativa(hace(2 * DIA), AHORA), 'hace 2 días');
+  assert.equal(fechaRelativa(hace(6 * DIA), AHORA), 'hace 6 días');
+});
+
+test('fechaRelativa: una semana o más muestra la fecha absoluta', () => {
+  const r = fechaRelativa(hace(7 * 86_400_000), AHORA);
+  assert.doesNotMatch(r, /^hace /);
+  assert.match(r, /2026/);
+});
