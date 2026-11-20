@@ -28,7 +28,7 @@ const DIST   = path.join(__dirname, '..', 'dist');
 const OUTPUT = path.join(__dirname, '..', 'app.js');
 
 // Orden de concatenación: vision primero (lo importa app)
-const ARCHIVOS = ['vision.js', 'alertas.js', 'app.js'];
+const ARCHIVOS = ['vision.js', 'alertas.js', 'capturas.js', 'app.js'];
 
 async function run() {
   const faltantes = ARCHIVOS.filter(f => !fs.existsSync(path.join(DIST, f)));
@@ -76,7 +76,7 @@ async function run() {
   const sizeDespues = Buffer.byteLength(result.code, 'utf-8');
   const reduccion   = (((sizeAntes - sizeDespues) / sizeAntes) * 100).toFixed(1);
 
-  console.log(`[minify] OK: dist/{vision,alertas,app}.js → app.js (bundle)`);
+  console.log(`[minify] OK: dist/{vision,alertas,capturas,app}.js → app.js (bundle)`);
   console.log(`         Antes:   ${(sizeAntes / 1024).toFixed(1)} KB`);
   console.log(`         Después: ${(sizeDespues / 1024).toFixed(1)} KB`);
   console.log(`         Reducción: ${reduccion}%`);
