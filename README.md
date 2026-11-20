@@ -9,7 +9,7 @@ Panel de monitoreo web para **Orbis** — sistema de tecnologia asistiva IoT par
 
 ## Descripcion
 
-Orbis Frontend es una aplicacion web estatica (HTML + CSS + Vanilla JS) que muestra en tiempo real los eventos detectados por el bastón inteligente SmartCane AI. Permite visualizar obstaculos detectados, distancias, resultados del analisis de IA (Google Vision) y escuchar los resultados por voz (Web Speech API).
+Orbis Frontend es una aplicacion web estatica (HTML + CSS + TypeScript compilado, sin frameworks) que muestra en tiempo real los eventos detectados por el bastón inteligente. Permite iniciar sesión, ver los eventos y las capturas analizadas, detectar objetos con la cámara directamente en el navegador (COCO-SSD) y escuchar los resultados por voz (Web Speech API).
 
 ---
 
@@ -17,7 +17,9 @@ Orbis Frontend es una aplicacion web estatica (HTML + CSS + Vanilla JS) que mues
 
 - HTML5 semantico
 - CSS3 (variables, grid, animaciones)
-- JavaScript ES2022 (Vanilla, sin frameworks ni npm)
+- TypeScript 5 (modo `strict`) compilado a un único `app.js` minificado con Terser
+- TensorFlow.js con COCO-SSD (y MobileNet de respaldo) para detección de objetos en el navegador
+- Chart.js para la gráfica de eventos
 - Web Speech API (sintesis de voz)
 - Google Fonts (Inter)
 
