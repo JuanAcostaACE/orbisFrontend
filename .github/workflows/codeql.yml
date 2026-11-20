@@ -1,0 +1,29 @@
+name: CodeQL — Frontend
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # El bundle minificado se genera en el build; se analiza el código fuente
+          config: |
+            paths:
+              - src
+              - scripts
+      - uses: github/codeql-action/analyze@v3
