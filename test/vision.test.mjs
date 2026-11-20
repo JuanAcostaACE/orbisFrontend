@@ -89,3 +89,11 @@ test('GestorVision: sin cooldown nunca hay duplicados', async () => {
   await g.inferir({});
   assert.equal((await g.inferir({})).esDuplicado, false);
 });
+
+test('GestorVision: una distancia crítica salta el cooldown', async () => {
+  const p = proveedorFalso({ detecciones: [det('Poste', 0.8)] });
+  const g = new GestorVision(p, null, { ...SIN_ESPERA, cooldownDeduplicacionMs: 60_000 });
+  await g.inferir({});
+  assert.equal((await g.inferir({}, 20, 30)).esDuplicado, false, '20 cm < 30 cm');
+  assert.equal((await g.inferir({}, 50, 30)).esDuplicado, true, '50 cm no es crítico');
+});
