@@ -67,3 +67,25 @@ test('GestorVision: ordena por confianza y formatea las etiquetas', async () => 
   assert.equal(r.etiquetasFormateadas, 'Persona (91%), Silla (60%)');
   assert.equal(r.proveedor, 'Falso');
 });
+
+test('GestorVision: la misma clase dentro del cooldown es un duplicado', async () => {
+  const p = proveedorFalso({ detecciones: [det('Puerta', 0.8)] });
+  const g = new GestorVision(p, null, { ...SIN_ESPERA, cooldownDeduplicacionMs: 60_000 });
+  assert.equal((await g.inferir({})).esDuplicado, false);
+  assert.equal((await g.inferir({})).esDuplicado, true);
+});
+
+test('GestorVision: otra clase dentro del cooldown no es duplicado', async () => {
+  const p = proveedorFalso({ detecciones: [det('Puerta', 0.8)] });
+  const g = new GestorVision(p, null, { ...SIN_ESPERA, cooldownDeduplicacionMs: 60_000 });
+  await g.inferir({});
+  p.inferir = async () => [det('Escalera', 0.8)];
+  assert.equal((await g.inferir({})).esDuplicado, false);
+});
+
+test('GestorVision: sin cooldown nunca hay duplicados', async () => {
+  const p = proveedorFalso({ detecciones: [det('Puerta', 0.8)] });
+  const g = new GestorVision(p, null, { ...SIN_ESPERA, cooldownDeduplicacionMs: 0 });
+  await g.inferir({});
+  assert.equal((await g.inferir({})).esDuplicado, false);
+});
