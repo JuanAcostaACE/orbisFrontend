@@ -730,7 +730,8 @@ function renderTabla(): void {
     const tieneIA = e.modo?.toUpperCase() === 'ACTIVO' &&
                     e.etiquetasIA && e.etiquetasIA !== 'SIN_IMAGEN' &&
                     !e.etiquetasIA.startsWith('ERROR');
-    if (tieneIA && e.etiquetasIA) {
+    // Sin síntesis de voz en el navegador no se ofrece un botón que solo mostraría un alert
+    if (tieneIA && e.etiquetasIA && synth) {
       const btn = document.createElement('button');
       btn.className = 'btn-voz'; btn.textContent = 'Leer';
       btn.setAttribute('aria-label', 'Leer etiquetas en voz alta');
