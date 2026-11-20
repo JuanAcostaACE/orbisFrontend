@@ -66,17 +66,17 @@
         <div class="form-group">
           <label for="reg-nombre">Nombre completo</label>
           <input id="reg-nombre" type="text" class="form-input" placeholder="Tu nombre"
-                 autocomplete="name" required />
+                 autocomplete="name" required minlength="2" maxlength="60" />
         </div>
         <div class="form-group">
           <label for="reg-correo">Correo electrónico</label>
           <input id="reg-correo" type="email" class="form-input" placeholder="correo@ejemplo.com"
-                 autocomplete="email" required />
+                 autocomplete="email" required maxlength="120" />
         </div>
         <div class="form-group">
           <label for="reg-pass">Contraseña <span class="form-hint">(mínimo 8 caracteres)</span></label>
           <input id="reg-pass" type="password" class="form-input" placeholder="Mínimo 8 caracteres"
-                 autocomplete="new-password" required minlength="8" />
+                 autocomplete="new-password" required minlength="8" maxlength="72" />
         </div>
         <button id="btn-registro" type="submit" class="btn-primary btn-full">
           Crear cuenta
