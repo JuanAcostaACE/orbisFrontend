@@ -333,6 +333,8 @@ function iniciarDashboard(): void {
     const p = getElOrNull('sim-preview') as HTMLImageElement | null;
     const input = this as HTMLInputElement;
     if (p && input.files?.[0]) {
+      // Cada vista previa crea un ObjectURL: se libera el anterior para no acumular memoria
+      if (p.src.startsWith('blob:')) URL.revokeObjectURL(p.src);
       p.src = URL.createObjectURL(input.files[0]);
       p.classList.remove('hidden');
     }
