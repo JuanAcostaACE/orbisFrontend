@@ -16,3 +16,12 @@ test('fechaRelativa: menos de 10 s es "justo ahora"', () => {
   assert.equal(fechaRelativa(hace(0), AHORA), 'justo ahora');
   assert.equal(fechaRelativa(hace(9_000), AHORA), 'justo ahora');
 });
+
+test('fechaRelativa: segundos, minutos y horas', () => {
+  assert.equal(fechaRelativa(hace(10_000), AHORA), 'hace 10 s');
+  assert.equal(fechaRelativa(hace(59_000), AHORA), 'hace 59 s');
+  assert.equal(fechaRelativa(hace(60_000), AHORA), 'hace 1 min');
+  assert.equal(fechaRelativa(hace(59 * 60_000), AHORA), 'hace 59 min');
+  assert.equal(fechaRelativa(hace(60 * 60_000), AHORA), 'hace 1 h');
+  assert.equal(fechaRelativa(hace(23 * 3_600_000), AHORA), 'hace 23 h');
+});
