@@ -38,5 +38,8 @@ jobs:
       - name: Type-check (tsc --noEmit)
         run: npx tsc --noEmit
 
+      - name: Tests unitarios (node:test)
+        run: npm test
+
       - name: Build JS bundle
         run: npm run build
