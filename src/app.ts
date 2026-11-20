@@ -111,6 +111,8 @@ async function apiFetch(url: string, opts: RequestInit = {}): Promise<Response> 
   return fetch(url, {
     ...opts,
     credentials: 'include',
+    // Sin respuesta en 15 s se aborta, para no dejar la UI colgada si el backend no responde
+    signal: opts.signal ?? AbortSignal.timeout(15_000),
     headers: {
       'Accept': 'application/json',
       ...(opts.headers ?? {})
