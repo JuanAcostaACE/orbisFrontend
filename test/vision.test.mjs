@@ -40,3 +40,14 @@ test('GestorVision: throttle entre inferencias seguidas', async () => {
   assert.deepEqual(segunda, { estado: 'omitida', motivo: 'throttle' });
   assert.equal(p.llamadas, antes, 'el proveedor no se llama durante el throttle');
 });
+
+test('GestorVision: una inferencia en curso bloquea la siguiente (mutex)', async () => {
+  let liberar;
+  const p = proveedorFalso();
+  p.inferir = () => new Promise(r => { liberar = () => r([det('Persona', 0.9)]); });
+  const g = new GestorVision(p, null, SIN_ESPERA);
+  const enCurso = g.inferir({});
+  assert.deepEqual(await g.inferir({}), { estado: 'omitida', motivo: 'ocupado' });
+  liberar();
+  assert.equal((await enCurso).estado, 'ok');
+});
