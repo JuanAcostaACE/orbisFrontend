@@ -10,3 +10,8 @@ desktop.ini
 
 node_modules/
 dist/
+*.pem
+*.key
+*.p12
+.vercel/
+coverage/

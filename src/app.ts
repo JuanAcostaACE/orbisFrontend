@@ -109,6 +109,10 @@ async function apiFetch(url: string, opts: RequestInit = {}): Promise<Response> 
   return fetch(url, {
     ...opts,
     credentials: 'include',
+    // Datos personales del usuario: no guardarlos en la caché HTTP del navegador
+    cache: opts.cache ?? 'no-store',
+    // Sin respuesta en 15 s se aborta, para no dejar la UI colgada si el backend no responde
+    signal: opts.signal ?? AbortSignal.timeout(15_000),
     headers: {
       'Accept': 'application/json',
       ...(opts.headers ?? {})
@@ -269,6 +273,12 @@ async function enviarRegistro(): Promise<void> {
   const correo  = (getElOrNull('reg-correo') as HTMLInputElement)?.value.trim() ?? '';
   const pass    = (getElOrNull('reg-pass')   as HTMLInputElement)?.value ?? '';
   if (!nombre || !correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
+  if (pass.length < 8) { mostrarMsgAuth('La contraseña debe tener al menos 8 caracteres'); return; }
+  // Mismo límite que el backend: BCrypt solo procesa 72 bytes (tildes y emojis ocupan más de 1)
+  if (new TextEncoder().encode(pass).length > 72) {
+    mostrarMsgAuth('La contraseña es demasiado larga (máximo 72 bytes)');
+    return;
+  }
   const btn = getEl('btn-registro') as HTMLButtonElement;
   btn.disabled = true;
   btn.textContent = 'Creando cuenta…';

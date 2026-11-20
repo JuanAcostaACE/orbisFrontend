@@ -6,10 +6,18 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
     name: Frontend type-check (TS) + build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +31,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Auditoria de dependencias (falla con vulnerabilidades altas)
+        run: npm audit --audit-level=high
 
       - name: Type-check (tsc --noEmit)
         run: npx tsc --noEmit

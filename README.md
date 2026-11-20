@@ -110,6 +110,15 @@ orbisFrontend/
 
 ---
 
+## Seguridad
+
+- Cabeceras de seguridad y CSP (modo Report-Only) configuradas en `vercel.json`.
+- Librerías de CDN con versión fija y SRI.
+- Sin `innerHTML` con datos del backend; sin tokens en `localStorage`.
+- CI con `npm audit`, Dependabot y CodeQL.
+
+Detalles y cómo reportar vulnerabilidades: [SECURITY.md](SECURITY.md).
+
 ## Parte del proyecto Orbis
 
 | Repositorio | Descripcion |

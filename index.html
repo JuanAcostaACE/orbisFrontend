@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="ORBIS - Panel de monitoreo IoT para tecnología asistiva con IA" />
   <meta name="theme-color" content="#0B1220" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
   <title>ORBIS - Panel de Monitoreo IoT</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -49,12 +50,12 @@
         <div class="form-group">
           <label for="login-correo">Correo electrónico</label>
           <input id="login-correo" type="email" class="form-input" placeholder="correo@ejemplo.com"
-                 autocomplete="email" required />
+                 autocomplete="email" required maxlength="120" />
         </div>
         <div class="form-group">
           <label for="login-pass">Contraseña</label>
           <input id="login-pass" type="password" class="form-input" placeholder="Tu contraseña"
-                 autocomplete="current-password" required />
+                 autocomplete="current-password" required maxlength="72" />
         </div>
         <button id="btn-login" type="submit" class="btn-primary btn-full">
           Iniciar sesión
@@ -65,17 +66,17 @@
         <div class="form-group">
           <label for="reg-nombre">Nombre completo</label>
           <input id="reg-nombre" type="text" class="form-input" placeholder="Tu nombre"
-                 autocomplete="name" required />
+                 autocomplete="name" required minlength="2" maxlength="60" />
         </div>
         <div class="form-group">
           <label for="reg-correo">Correo electrónico</label>
           <input id="reg-correo" type="email" class="form-input" placeholder="correo@ejemplo.com"
-                 autocomplete="email" required />
+                 autocomplete="email" required maxlength="120" />
         </div>
         <div class="form-group">
           <label for="reg-pass">Contraseña <span class="form-hint">(mínimo 8 caracteres)</span></label>
           <input id="reg-pass" type="password" class="form-input" placeholder="Mínimo 8 caracteres"
-                 autocomplete="new-password" required minlength="8" />
+                 autocomplete="new-password" required minlength="8" maxlength="72" />
         </div>
         <button id="btn-registro" type="submit" class="btn-primary btn-full">
           Crear cuenta
