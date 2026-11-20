@@ -47,24 +47,19 @@ El sitio publicado es estatico, pero el codigo fuente esta en TypeScript y se co
 
 ## Configuracion de la URL del backend
 
-Edita la linea 13 de `app.js`:
+No hay que editar ninguna URL. `src/app.ts` decide la base de la API asi:
 
-```javascript
-// ANTES (placeholder):
-: 'REEMPLAZAR_CON_URL_RAILWAY';
+- **En `localhost` o `127.0.0.1`:** llama directamente a `http://localhost:8080` (backend local).
+- **En cualquier otro dominio:** usa rutas relativas (`/api`, `/auth`, `/health`). `vercel.json` las reescribe hacia el backend de Railway, de modo que el navegador ve un solo origen y la cookie de sesion funciona como cookie de primera parte.
 
-// DESPUES (tu URL real de Railway):
-: 'https://tu-proyecto.railway.app';
-```
-
-En desarrollo local, el frontend detecta automaticamente localhost y apunta a http://localhost:8080.
+Si el backend cambia de URL, hay que actualizar los `rewrites` de `vercel.json`.
 
 ---
 
 ## Variables de entorno
 
 Este proyecto **no usa variables de entorno** al ser estatico puro.
-La URL del backend se configura directamente en `app.js` como se explica arriba.
+La URL del backend sale de `vercel.json` (produccion) o de `localhost:8080` (desarrollo), como se explica arriba.
 
 ---
 
