@@ -68,3 +68,9 @@ test('capMensajeError: otros códigos y fallos de red', () => {
   assert.equal(capMensajeError(null, new Error('timeout')),
     'Sin conexión con el servidor (timeout). Se reintentará automáticamente.');
 });
+
+test('capIdCorto: recorta a 8 caracteres y acepta números', () => {
+  assert.equal(capIdCorto('123e4567-e89b-12d3'), '123e4567');
+  assert.equal(capIdCorto('abc'), 'abc');
+  assert.equal(capIdCorto(42), '42');
+});
