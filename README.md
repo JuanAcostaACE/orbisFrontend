@@ -91,11 +91,19 @@ Para iniciar sesion y ver eventos, el backend debe estar corriendo en `http://lo
 
 ```
 orbisFrontend/
-├── index.html    # Interfaz principal
-├── style.css     # Estilos (dark mode, responsive)
-├── app.js        # Logica: fetch API, render, Web Speech
-├── .gitignore
-└── README.md
+├── index.html          # Interfaz principal
+├── style.css           # Estilos (dark mode, responsive)
+├── app.js              # Bundle minificado generado por npm run build (se versiona)
+├── src/
+│   ├── app.ts          # Sesion, dashboard, camara, tabla, grafica y polling
+│   ├── vision.ts       # Proveedores de IA (COCO-SSD, MobileNet) y GestorVision
+│   └── capturas.ts     # Lista paginada de capturas analizadas
+├── scripts/minify.cjs  # Une dist/*.js y minifica con Terser
+├── test/               # Tests unitarios (node:test)
+├── docs/               # Documentacion tecnica
+├── bench/              # Benchmark de modelos de deteccion
+├── vercel.json         # Rewrites hacia el backend y cabeceras de seguridad
+└── package.json
 ```
 
 ---
