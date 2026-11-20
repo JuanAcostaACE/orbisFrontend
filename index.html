@@ -125,16 +125,8 @@
           <span class="kpi-number" id="count-total">-</span>
         </div>
         <div class="kpi-card">
-          <span class="kpi-label">Modo pasivo</span>
-          <span class="kpi-number" id="count-pasivo">-</span>
-        </div>
-        <div class="kpi-card">
           <span class="kpi-label">Modo activo</span>
           <span class="kpi-number" id="count-activo">-</span>
-        </div>
-        <div class="kpi-card">
-          <span class="kpi-label">Distancia promedio</span>
-          <span class="kpi-number" id="avg-distancia">-</span>
         </div>
       </section>
 
@@ -161,21 +153,10 @@
           <p class="sim-desc">Envía datos como lo haría el hardware ESP32 real.</p>
           <div class="sim-form">
 
-            <div class="form-group">
-              <label for="sim-modo">Modo de operación</label>
-              <select id="sim-modo" class="form-select">
-                <option value="PASIVO">Pasivo: sensor ultrasónico</option>
-                <option value="ACTIVO">Activo: sensor y cámara con IA</option>
-              </select>
-            </div>
+            <p class="sim-desc">Modo activo: el bastón toma una foto con la cámara y la IA describe lo que ve.</p>
 
-            <div class="form-group">
-              <label for="sim-distancia">Distancia detectada: <span id="sim-distancia-val" class="form-value">45 cm</span></label>
-              <input type="range" id="sim-distancia" min="5" max="200" value="45" class="form-range" />
-            </div>
-
-            <!-- CÁMARA / IMAGEN (solo modo ACTIVO) -->
-            <div id="grupo-camara" class="hidden">
+            <!-- CÁMARA / IMAGEN -->
+            <div id="grupo-camara">
               <div id="ia-status" class="ia-status">Cargando modelo IA…</div>
               <div class="img-source-tabs" role="group" aria-label="Fuente de imagen">
                 <button class="src-btn active" id="btn-src-cam" type="button" aria-pressed="true">Cámara en vivo</button>
@@ -215,7 +196,6 @@
           <div class="table-filters">
             <select id="filtro-modo" class="form-select sm" aria-label="Filtrar por modo">
               <option value="">Todos los modos</option>
-              <option value="PASIVO">Pasivo</option>
               <option value="ACTIVO">Activo</option>
             </select>
             <input type="search" id="filtro-buscar" class="form-input sm"
