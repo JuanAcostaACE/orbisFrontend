@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="ORBIS Panel de monitoreo IoT para tecnología asistiva con IA" />
+  <meta name="description" content="ORBIS - Panel de monitoreo IoT para tecnología asistiva con IA" />
   <meta name="theme-color" content="#0B1220" />
   <title>ORBIS - Panel de Monitoreo IoT</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
 
   <!-- PANTALLA DE AUTENTICACIÓN: se muestra si no hay sesión activa. -->
   <div id="pantalla-auth" class="auth-screen" role="main" aria-label="Autenticación">
@@ -44,7 +45,7 @@
 
       <div id="auth-mensaje" class="auth-msg" role="alert" aria-live="polite"></div>
 
-      <form id="form-login" class="auth-form" aria-labelledby="tab-login" novalidate>
+      <form id="form-login" role="tabpanel" class="auth-form" aria-labelledby="tab-login" novalidate>
         <div class="form-group">
           <label for="login-correo">Correo electrónico</label>
           <input id="login-correo" type="email" class="form-input" placeholder="correo@ejemplo.com"
@@ -60,7 +61,7 @@
         </button>
       </form>
 
-      <form id="form-registro" class="auth-form hidden" aria-labelledby="tab-registro" novalidate>
+      <form id="form-registro" role="tabpanel" class="auth-form hidden" aria-labelledby="tab-registro" novalidate>
         <div class="form-group">
           <label for="reg-nombre">Nombre completo</label>
           <input id="reg-nombre" type="text" class="form-input" placeholder="Tu nombre"
@@ -108,7 +109,7 @@
       </div>
     </header>
 
-    <main class="main" role="main">
+    <main class="main" id="contenido-principal" tabindex="-1">
 
       <div class="estado-sistema">
         <span id="estado-sistema" role="status" aria-live="polite">Sistema iniciando…</span>
@@ -222,7 +223,7 @@
           </div>
         </div>
         <div id="error-banner" class="error-banner hidden" role="alert" aria-live="polite"></div>
-        <div id="loading" class="loading" aria-live="polite" aria-busy="false">
+        <div id="loading" class="loading hidden" role="status" aria-busy="false">
           <div class="spinner" aria-hidden="true"></div><span>Cargando eventos…</span>
         </div>
         <div class="table-wrapper">
@@ -239,7 +240,7 @@
           </table>
         </div>
         <div id="empty-state" class="empty-state hidden" role="status">
-          <p>Sin eventos. Usa el simulador o conecta el hardware.</p>
+          <p id="empty-msg">Sin eventos. Usa el simulador o conecta el hardware.</p>
         </div>
 
         <nav class="paginacion" aria-label="Paginación de eventos">
@@ -251,6 +252,33 @@
         <div class="table-footer">
           <span id="table-count" class="table-count" aria-live="polite"></span>
         </div>
+      </section>
+
+
+      <section class="card capturas-card" aria-labelledby="h2-capturas">
+        <div class="card-header">
+          <h2 id="h2-capturas">Capturas analizadas</h2>
+          <span id="cap-actualizado" class="cap-actualizado" role="status"></span>
+        </div>
+        <p class="cap-nota">Se muestra la descripción generada por la IA. Las imágenes no se conservan: el servidor las elimina tras el análisis.</p>
+        <div id="cap-contenido" aria-busy="true">
+          <div id="cap-cargando" class="loading">
+            <div class="spinner" aria-hidden="true"></div><span>Cargando capturas…</span>
+          </div>
+          <div id="cap-error" class="error-banner hidden" role="alert">
+            <span id="cap-error-msg"></span>
+            <button id="cap-reintentar" class="btn-pag cap-reintentar" type="button">Reintentar</button>
+          </div>
+          <div id="cap-vacio" class="empty-state hidden" role="status">
+            <p>Aún no hay capturas analizadas. Aparecerán aquí cuando el bastón envíe una foto en modo activo.</p>
+          </div>
+          <ul id="cap-lista" class="capturas-lista hidden" aria-label="Lista de capturas analizadas"></ul>
+        </div>
+        <nav id="cap-nav" class="paginacion hidden" aria-label="Paginación de capturas">
+          <button id="cap-prev" class="btn-pag" type="button" disabled>Anterior</button>
+          <span id="cap-pag-info" class="pag-info" aria-live="polite"></span>
+          <button id="cap-next" class="btn-pag" type="button" disabled>Siguiente</button>
+        </nav>
       </section>
 
     </main>
