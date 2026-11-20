@@ -38,3 +38,19 @@ test('fechaRelativa: una semana o más muestra la fecha absoluta', () => {
   assert.doesNotMatch(r, /^hace /);
   assert.match(r, /2026/);
 });
+
+test('fechaRelativa: fecha inválida devuelve "--"', () => {
+  assert.equal(fechaRelativa('no-es-fecha', AHORA), '--');
+});
+
+test('fechaRelativa: fecha futura (reloj desfasado) muestra la fecha absoluta', () => {
+  const futura = new Date(AHORA + 5 * 60_000).toISOString();
+  const r = fechaRelativa(futura, AHORA);
+  assert.doesNotMatch(r, /^hace |justo ahora/);
+  assert.match(r, /2026/);
+});
+
+test('fechaRelativa: un desfase menor de 1 min se trata como "justo ahora"', () => {
+  const casi = new Date(AHORA + 30_000).toISOString();
+  assert.equal(fechaRelativa(casi, AHORA), 'justo ahora');
+});
