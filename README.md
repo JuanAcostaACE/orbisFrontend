@@ -110,8 +110,17 @@ orbisFrontend/
 
 ## Como se comunica con el backend
 
-- **GET** /api/v1/eventos — Obtiene la lista de eventos (se refresca cada 10 segundos automaticamente)
-- El backend debe estar configurado con CORS para aceptar el origen de Vercel (*.vercel.app)
+Todas las llamadas pasan por `apiFetch` (`src/app.ts`), que envia la cookie de sesion (`credentials: "include"`), no guarda respuestas en cache y corta a los 15 s.
+
+| Metodo | Ruta | Uso |
+|---|---|---|
+| POST | `/auth/login`, `/auth/registro`, `/auth/logout` | Sesion |
+| GET | `/auth/me` | Comprobar si hay sesion al abrir la pagina |
+| GET | `/api/v1/eventos?page=&size=` | Eventos paginados (se refresca cada 15 s) |
+| POST | `/api/v1/eventos` | Evento enviado desde el simulador |
+| GET | `/api/v1/dispositivos/capturas?page=&size=` | Capturas analizadas (se refresca cada 10 s) |
+
+El refresco automatico se pausa si la pestaña esta oculta. Con el proxy de Vercel no hace falta CORS. En local, el backend solo acepta por defecto `http://localhost:5173` y `http://localhost:8080`; si sirves el panel en el puerto 3000, arranca el backend con `APP_CORS_ORIGIN=http://localhost:3000`.
 
 ---
 
