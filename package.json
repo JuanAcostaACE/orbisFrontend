@@ -1,6 +1,7 @@
 {
   "name": "orbis-frontend",
   "version": "1.0.0",
+  "private": true,
   "description": "ORBIS IoT Monitor - Frontend con TypeScript",
   "scripts": {
     "build": "tsc && node scripts/minify.cjs",
@@ -11,5 +12,8 @@
   "devDependencies": {
     "typescript": "^5.4.5",
     "terser": "^5.31.6"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
