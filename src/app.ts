@@ -17,9 +17,6 @@ interface EventoResponse {
   obstaculoNivel?: string | null;
 }
 
-/** Alias de compatibilidad (algunos paths internos aún usan RegistroEvento) */
-type RegistroEvento = EventoResponse;
-
 interface EventoRequest {
   modo: string;
   distanciaCm: number;
@@ -43,20 +40,9 @@ interface AuthResponse {
   mensaje?: string;
 }
 
-interface Prediccion {
-  className: string;
-  probability: number;
-}
-
-interface MobileNetModel {
-  classify(
-    img: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
-    topk?: number
-  ): Promise<Prediccion[]>;
-}
-
-import { gestorVision, type ResultadoInferencia, type Deteccion } from './vision.js';
+import { gestorVision, MENSAJE_ERROR_MODELO, type ResultadoInferencia, type Deteccion } from './vision.js';
 import { HisteresisPasiva, nivelDistancia, UMBRAL_CRITICO_CM } from './alertas.js';
+import { CAP_REFRESH_MS, cargarCapturas, iniciarCapturas, iniciarPollingCapturas, detenerPollingCapturas, reiniciarCapturas } from './capturas.js';
 
 declare const Chart: any;
 
@@ -101,12 +87,7 @@ let autoRunning: boolean            = false;
 let streamActivo: MediaStream | null = null;
 let fuenteImagen: 'cam' | 'file'    = 'cam';
 let usuarioActual: AuthResponse | null = null;
-let sessionChecked: boolean         = false;
 const synth: SpeechSynthesis | null = window.speechSynthesis ?? null;
-
-// IA: última detección para deduplicación en simulador
-let ultimaDeteccionSimulador: string | null = null;
-let ultimoEnvioSimuladorTs = 0;
 
 // Anti-saturación PASIVO (histéresis 100/115 cm + cooldown 5 s) — ver alertas.ts
 const histeresis = new HisteresisPasiva();
@@ -193,6 +174,8 @@ async function logout(): Promise<void> {
 
 function mostrarPantallaAuth(): void {
   detenerPolling();
+  reiniciarCapturas();
+  detenerAuto();          // ninguna sesión termina con envíos automáticos en marcha
   detenerCamara();
   histeresis.reiniciar();
   limpiarPeligro();
@@ -227,6 +210,8 @@ function mostrarMsgAuth(msg: string, esError = true): void {
 function mostrarTabAuth(tab: 'login' | 'registro'): void {
   getEl('tab-login').classList.toggle('active', tab === 'login');
   getEl('tab-registro').classList.toggle('active', tab === 'registro');
+  getEl('tab-login').setAttribute('aria-selected', String(tab === 'login'));
+  getEl('tab-registro').setAttribute('aria-selected', String(tab === 'registro'));
   getEl('form-login').classList.toggle('hidden', tab !== 'login');
   getEl('form-registro').classList.toggle('hidden', tab !== 'registro');
   mostrarMsgAuth('');
@@ -238,7 +223,6 @@ function mostrarTabAuth(tab: 'login' | 'registro'): void {
 document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
   // 1. Verificar sesión existente antes de mostrar cualquier UI
   const haySession = await verificarSesion();
-  sessionChecked = true;
 
   if (haySession) {
     mostrarDashboard();
@@ -251,52 +235,68 @@ document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
   getEl('tab-login').addEventListener('click', () => mostrarTabAuth('login'));
   getEl('tab-registro').addEventListener('click', () => mostrarTabAuth('registro'));
 
-  getEl('btn-login').addEventListener('click', async () => {
-    const correo = (getElOrNull('login-correo') as HTMLInputElement)?.value.trim() ?? '';
-    const pass   = (getElOrNull('login-pass')   as HTMLInputElement)?.value ?? '';
-    if (!correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
-    const btn = getEl('btn-login') as HTMLButtonElement;
-    btn.disabled = true;
-    btn.textContent = 'Iniciando...';
-    try {
-      await login(correo, pass);
-      mostrarDashboard();
-      iniciarDashboard();
-    } catch (e) {
-      mostrarMsgAuth((e as Error).message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Iniciar sesión';
-    }
+  // Formularios reales: Enter y el botón submit disparan el mismo handler
+  getEl('form-login').addEventListener('submit', (e: Event): void => {
+    e.preventDefault();
+    void enviarLogin();
   });
 
-  getEl('btn-registro').addEventListener('click', async () => {
-    const nombre  = (getElOrNull('reg-nombre') as HTMLInputElement)?.value.trim() ?? '';
-    const correo  = (getElOrNull('reg-correo') as HTMLInputElement)?.value.trim() ?? '';
-    const pass    = (getElOrNull('reg-pass')   as HTMLInputElement)?.value ?? '';
-    if (!nombre || !correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
-    const btn = getEl('btn-registro') as HTMLButtonElement;
-    btn.disabled = true;
-    btn.textContent = 'Registrando...';
-    try {
-      await registro(nombre, correo, pass);
-      mostrarMsgAuth('Cuenta creada. Ahora inicia sesión.', false);
-      mostrarTabAuth('login');
-    } catch (e) {
-      mostrarMsgAuth((e as Error).message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Crear cuenta';
-    }
+  getEl('form-registro').addEventListener('submit', (e: Event): void => {
+    e.preventDefault();
+    void enviarRegistro();
   });
 
   getElOrNull('btn-logout')?.addEventListener('click', logout);
 });
 
+async function enviarLogin(): Promise<void> {
+  const correo = (getElOrNull('login-correo') as HTMLInputElement)?.value.trim() ?? '';
+  const pass   = (getElOrNull('login-pass')   as HTMLInputElement)?.value ?? '';
+  if (!correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
+  const btn = getEl('btn-login') as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = 'Iniciando sesión…';
+  try {
+    await login(correo, pass);
+    mostrarDashboard();
+    iniciarDashboard();
+  } catch (e) {
+    mostrarMsgAuth((e as Error).message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Iniciar sesión';
+  }
+}
+
+async function enviarRegistro(): Promise<void> {
+  const nombre  = (getElOrNull('reg-nombre') as HTMLInputElement)?.value.trim() ?? '';
+  const correo  = (getElOrNull('reg-correo') as HTMLInputElement)?.value.trim() ?? '';
+  const pass    = (getElOrNull('reg-pass')   as HTMLInputElement)?.value ?? '';
+  if (!nombre || !correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
+  const btn = getEl('btn-registro') as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = 'Creando cuenta…';
+  try {
+    await registro(nombre, correo, pass);
+    mostrarTabAuth('login');
+    mostrarMsgAuth('Solicitud procesada. Inicia sesión para continuar.', false);
+  } catch (e) {
+    mostrarMsgAuth((e as Error).message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Crear cuenta';
+  }
+}
+
 function iniciarDashboard(): void {
   paginaActual = 0;
   ultimaFirma = '';
   void cargarEventos({ forzar: true });
+  iniciarCapturas({
+    apiBase: API_BASE,
+    fetchApi: apiFetch,
+    alExpirarSesion: () => { usuarioActual = null; mostrarPantallaAuth(); }
+  }, false);
   iniciarPolling();
   refrescarEstado();
 
@@ -305,7 +305,7 @@ function iniciarDashboard(): void {
 
   cargarModeloIA().catch(() => {});
 
-  getEl('btn-refresh').addEventListener('click', () => { paginaActual = 0; void cargarEventos({ forzar: true }); });
+  getEl('btn-refresh').addEventListener('click', () => { paginaActual = 0; void cargarEventos({ forzar: true }); void cargarCapturas(true); });
   getEl('btn-poll-toggle').addEventListener('click', togglePolling);
   getEl('btn-chart-bar').addEventListener('click', () => cambiarChart('bar'));
   getEl('btn-chart-line').addEventListener('click', () => cambiarChart('line'));
@@ -361,16 +361,16 @@ function iniciarDashboard(): void {
 async function cargarModeloIA(): Promise<void> {
   const statusEl = getElOrNull('ia-status');
   try {
-    if (statusEl) statusEl.textContent = 'Cargando modelo IA (COCO-SSD, ~6MB)...';
+    if (statusEl) statusEl.textContent = 'Cargando modelo IA (COCO-SSD, ~6 MB)…';
     const nombreCargado = await gestorVision.inicializarAsync();
     if (statusEl) {
-      statusEl.textContent = `Modelo ${nombreCargado} listo ✓`;
-      (statusEl as HTMLElement).style.color = '#22c55e';
+      statusEl.textContent = `Modelo ${nombreCargado} listo`;
+      (statusEl as HTMLElement).style.color = '#2DD4BF';
     }
   } catch (e) {
     if (statusEl) {
       statusEl.textContent = 'Error al cargar modelo IA';
-      (statusEl as HTMLElement).style.color = '#ef4444';
+      (statusEl as HTMLElement).style.color = '#F87171';
     }
     throw e;
   }
@@ -379,7 +379,7 @@ async function cargarModeloIA(): Promise<void> {
 async function analizarConIA(
   dataUrl: string,
   distanciaActual?: number
-): Promise<{ etiquetas: string; esDuplicado: boolean; detecciones: Deteccion[] }> {
+): Promise<ResultadoInferencia> {
   if (!gestorVision.listo()) {
     await gestorVision.inicializarAsync();
   }
@@ -396,25 +396,30 @@ async function analizarConIA(
     elemento = img;
   }
 
-  const resultado: ResultadoInferencia | null = await gestorVision.inferir(
+  const resultado: ResultadoInferencia = await gestorVision.inferir(
     elemento,
     distanciaActual,
     UMBRAL_CRITICO_CM   // distancia crítica: fuerza el envío aunque sea duplicado
   );
 
-  if (!resultado) {
-    // Throttle activo o mutex — retornar vacío
-    return { etiquetas: '', esDuplicado: true, detecciones: [] };
-  }
-
   // Bounding boxes solo sobre el video en vivo (coordenadas del frame del video)
-  if (elemento === video) dibujarDetecciones(resultado.detecciones);
+  if (resultado.estado === 'ok' && elemento === video) dibujarDetecciones(resultado.detecciones);
 
-  return {
-    etiquetas:    resultado.etiquetasFormateadas,
-    esDuplicado:  resultado.esDuplicado,
-    detecciones:  resultado.detecciones
-  };
+  return resultado;
+}
+
+/** Mensaje de estado para un análisis que no produjo evento (nunca se envía vacío). */
+function mensajeSinEvento(r: ResultadoInferencia): string | null {
+  switch (r.estado) {
+    case 'omitida':
+      if (r.motivo === 'throttle') return 'Análisis omitido: espera ~1,2 s entre detecciones. Evento no enviado.';
+      if (r.motivo === 'ocupado')  return 'Hay un análisis de IA en curso. Evento no enviado.';
+      return 'El modelo de IA aún no está listo. Evento no enviado.';
+    case 'sin_deteccion':
+      return 'La IA no detectó objetos con confianza suficiente (≥ 55 %). Evento no enviado.';
+    case 'ok':
+      return r.esDuplicado ? `Detección duplicada (cooldown 5s): ${r.etiquetasFormateadas || 'sin etiquetas'} — evento no enviado` : null;
+  }
 }
 
 // ----------------------------------------------------------------
@@ -455,14 +460,14 @@ function dibujarDetecciones(dets: Deteccion[]): void {
     if (!d.bbox) return;
     const [x, y, w, h] = d.bbox;
     const rx = offX + x * escala, ry = offY + y * escala;
-    ctx.strokeStyle = '#fde047';
+    ctx.strokeStyle = '#F5B94A';
     ctx.strokeRect(rx, ry, w * escala, h * escala);
     const etiqueta = `${d.clase} ${Math.round(d.confianza * 100)}%`;
     const tw = ctx.measureText(etiqueta).width + 8;
     const ty = Math.max(0, ry - 18);
     ctx.fillStyle = '#000';
     ctx.fillRect(rx, ty, tw, 18);
-    ctx.fillStyle = '#fde047';
+    ctx.fillStyle = '#F5B94A';
     ctx.fillText(etiqueta, rx + 4, ty + 2);
   });
 
@@ -477,6 +482,8 @@ function cambiarFuente(fuente: 'cam' | 'file'): void {
   fuenteImagen = fuente;
   getEl('btn-src-cam').classList.toggle('active', fuente === 'cam');
   getEl('btn-src-file').classList.toggle('active', fuente === 'file');
+  getEl('btn-src-cam').setAttribute('aria-pressed', String(fuente === 'cam'));
+  getEl('btn-src-file').setAttribute('aria-pressed', String(fuente === 'file'));
   getEl('panel-cam').classList.toggle('hidden', fuente !== 'cam');
   getEl('panel-file').classList.toggle('hidden', fuente !== 'file');
   if (fuente !== 'cam') detenerCamara();
@@ -493,9 +500,13 @@ async function iniciarCamara(): Promise<void> {
     getEl('btn-cam-start').classList.add('hidden');
     getEl('btn-cam-stop').classList.remove('hidden');
     const status = getElOrNull('cam-status');
-    if (status) { status.textContent = 'Camara activa'; status.className = 'cam-status active'; }
+    if (status) { status.textContent = 'Cámara activa'; status.className = 'cam-status active'; }
   } catch (e) {
-    alert('No se pudo acceder a la camara: ' + (e as Error).message);
+    const status = getElOrNull('cam-status');
+    if (status) {
+      status.textContent = 'No se pudo acceder a la cámara: ' + (e as Error).message;
+      status.className = 'cam-status';
+    }
   }
 }
 
@@ -508,7 +519,7 @@ function detenerCamara(): void {
   getElOrNull('btn-cam-start')?.classList.remove('hidden');
   getElOrNull('btn-cam-stop')?.classList.add('hidden');
   const status = getElOrNull('cam-status');
-  if (status) { status.textContent = 'Camara inactiva'; status.className = 'cam-status'; }
+  if (status) { status.textContent = 'Cámara inactiva'; status.className = 'cam-status'; }
 }
 
 function capturarFrame(): string | null {
@@ -525,6 +536,10 @@ function capturarFrame(): string | null {
 // ----------------------------------------------------------------
 // FETCH — CARGAR EVENTOS (paginado)
 // ----------------------------------------------------------------
+class ErrorHttp extends Error {
+  constructor(public readonly status: number) { super(`HTTP ${status}`); }
+}
+
 interface OpcionesCarga { silencioso?: boolean; forzar?: boolean }
 
 /** Huella de la página para detectar si hubo cambios reales desde el último poll. */
@@ -546,7 +561,7 @@ async function cargarEventos(opts: OpcionesCarga = {}): Promise<void> {
       mostrarPantallaAuth();
       return;
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new ErrorHttp(res.status);
 
     const pagina = await res.json() as PaginaResponse;
     ocultarError();
@@ -568,8 +583,13 @@ async function cargarEventos(opts: OpcionesCarga = {}): Promise<void> {
     actualizarControlPaginacion(pagina);
 
   } catch (e) {
-    mostrarError(`Sin conexión: ${(e as Error).message}`);
-    refrescarEstado('sin conexión con el servidor');
+    if (e instanceof ErrorHttp) {
+      mostrarError(`El servidor no pudo entregar los eventos (error ${e.status}). Se reintentará automáticamente.`);
+      refrescarEstado('error del servidor');
+    } else {
+      mostrarError('Sin conexión con el servidor. Se reintentará automáticamente.');
+      refrescarEstado('sin conexión con el servidor');
+    }
   } finally {
     cargaEnCurso = false;
     mostrarCargando(false);
@@ -586,10 +606,12 @@ function iniciarPolling(): void {
     if (document.hidden) return;      // pestaña oculta: no consultar
     void cargarEventos({ silencioso: true });
   }, REFRESH_MS);
+  iniciarPollingCapturas();
 }
 
 function detenerPolling(): void {
   if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+  detenerPollingCapturas();
 }
 
 function togglePolling(): void {
@@ -597,13 +619,14 @@ function togglePolling(): void {
   const btn = getEl('btn-poll-toggle');
   btn.setAttribute('aria-pressed', String(pollPausado));
   btn.textContent = pollPausado
-    ? '▶ Reanudar actualización automática'
-    : '⏸ Pausar actualización automática';
+    ? 'Reanudar actualización automática'
+    : 'Pausar actualización automática';
   if (pollPausado) {
     detenerPolling();
   } else {
     iniciarPolling();
     void cargarEventos({ silencioso: true });
+    void cargarCapturas(true);
   }
   refrescarEstado();
 }
@@ -612,7 +635,7 @@ function togglePolling(): void {
 function refrescarEstado(extra = ''): void {
   const el = getElOrNull('estado-sistema');
   if (!el) return;
-  const base = `Sistema operativo · Actualización automática ${pollPausado ? 'en pausa' : `activa (cada ${REFRESH_MS / 1000} s)`}`;
+  const base = `Sistema operativo · Actualización automática ${pollPausado ? 'en pausa' : `activa (eventos cada ${REFRESH_MS / 1000} s, capturas cada ${CAP_REFRESH_MS / 1000} s)`}`;
   const texto = extra ? `${base} · ${extra}` : base;
   if (el.textContent !== texto) el.textContent = texto;
 }
@@ -644,8 +667,8 @@ function anunciarPeligro(distancia: number): void {
   const nivel = nivelDistancia(distancia);
   if (el) {
     el.textContent = nivel === 'CRITICO'
-      ? `⛔ PELIGRO CRÍTICO: obstáculo a ${distancia} cm`
-      : `⚠ PELIGRO: obstáculo a ${distancia} cm`;
+      ? `PELIGRO CRÍTICO: obstáculo a ${distancia} cm`
+      : `PELIGRO: obstáculo a ${distancia} cm`;
   }
   beepLocal();
 }
@@ -714,6 +737,12 @@ function tdText(text: string, className?: string): HTMLTableCellElement {
   return td;
 }
 
+/** Marca de tiempo del evento; 0 si falta o es inválida (evita NaN en el orden). */
+function tiempoEvento(e: EventoResponse): number {
+  const t = e.fechaHora ? new Date(e.fechaHora).getTime() : 0;
+  return Number.isNaN(t) ? 0 : t;
+}
+
 function renderTabla(): void {
   const filtroModo   = getEl('filtro-modo')   as HTMLSelectElement;
   const filtroBuscar = getEl('filtro-buscar') as HTMLInputElement;
@@ -729,17 +758,23 @@ function renderTabla(): void {
       (!modo   || e.modo?.toUpperCase() === modo) &&
       (!buscar || (e.etiquetasIA ?? '').toLowerCase().includes(buscar))
     )
-    .sort((a, b) => new Date(b.fechaHora!).getTime() - new Date(a.fechaHora!).getTime());
+    .sort((a, b) => tiempoEvento(b) - tiempoEvento(a));
 
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
   if (filtrados.length === 0) {
+    const msg = getElOrNull('empty-msg');
+    if (msg) {
+      msg.textContent = todosEventos.length > 0
+        ? 'Ningún evento de esta página coincide con los filtros.'
+        : 'Sin eventos. Usa el simulador o conecta el hardware.';
+    }
     emptyState.classList.remove('hidden');
     tableCount.textContent = '';
     return;
   }
   emptyState.classList.add('hidden');
-  tableCount.textContent = `${filtrados.length} evento${filtrados.length !== 1 ? 's' : ''}`;
+  tableCount.textContent = `${filtrados.length} evento${filtrados.length !== 1 ? 's' : ''} en esta página`;
 
   filtrados.forEach(e => {
     const tr = document.createElement('tr');
@@ -750,8 +785,7 @@ function renderTabla(): void {
     const badge  = document.createElement('span');
     badge.className = 'badge-modo';
     badge.setAttribute('data-modo', (e.modo ?? '').toUpperCase());
-    const iconoModo = (e.modo ?? '').toUpperCase() === 'ACTIVO' ? '📷' : '📡';
-    badge.textContent = `${iconoModo} ${e.modo ?? '--'}`;
+    badge.textContent = e.modo ?? '--';
     tdModo.appendChild(badge);
     tr.appendChild(tdModo);
 
@@ -764,13 +798,16 @@ function renderTabla(): void {
       const nb = document.createElement('span');
       nb.className = 'badge-dist';
       nb.setAttribute('data-nivel', nivel);
-      nb.textContent = nivel === 'CRITICO' ? '⛔ CRÍTICO' : nivel === 'PELIGRO' ? '⚠ PELIGRO' : '✔ SEGURO';
+      nb.textContent = nivel === 'CRITICO' ? 'CRÍTICO' : nivel === 'PELIGRO' ? 'PELIGRO' : 'SEGURO';
       tdDist.appendChild(nb);
     } else {
       tdDist.textContent = '--';
     }
     tr.appendChild(tdDist);
-    tr.appendChild(tdText(e.etiquetasIA ?? '--', 'td-ia'));
+    // Mismo criterio que el mensaje de confirmación: SIN_IMAGEN no se muestra
+    const etiquetasVisibles = e.etiquetasIA && e.etiquetasIA !== 'SIN_IMAGEN'
+      ? e.etiquetasIA : '--';
+    tr.appendChild(tdText(etiquetasVisibles, 'td-ia'));
     tr.appendChild(tdText(formatFecha(e.fechaHora), 'td-fecha'));
 
     const tdVoz = document.createElement('td');
@@ -779,7 +816,7 @@ function renderTabla(): void {
                     !e.etiquetasIA.startsWith('ERROR');
     if (tieneIA && e.etiquetasIA) {
       const btn = document.createElement('button');
-      btn.className = 'btn-voz'; btn.textContent = '🔊';
+      btn.className = 'btn-voz'; btn.textContent = 'Leer';
       btn.setAttribute('aria-label', 'Leer etiquetas en voz alta');
       const textoVoz = e.etiquetasIA;
       btn.addEventListener('click', () => leerVoz(textoVoz, btn));
@@ -798,7 +835,7 @@ function renderTabla(): void {
 function renderChart(eventos: EventoResponse[]): void {
   const grupos: Record<string, { PASIVO: number; ACTIVO: number }> = {};
   [...eventos]
-    .sort((a, b) => new Date(a.fechaHora!).getTime() - new Date(b.fechaHora!).getTime())
+    .sort((a, b) => tiempoEvento(a) - tiempoEvento(b))
     .slice(-20)
     .forEach(e => {
       const dia = e.fechaHora
@@ -822,19 +859,19 @@ function renderChart(eventos: EventoResponse[]): void {
     data: {
       labels,
       datasets: [
-        { label: 'Pasivo', data: pasivos, backgroundColor: 'rgba(34,197,94,0.7)',  borderColor: 'rgba(34,197,94,1)',  borderWidth: 2, fill: chartType === 'line', tension: 0.4 },
-        { label: 'Activo', data: activos, backgroundColor: 'rgba(99,102,241,0.7)', borderColor: 'rgba(99,102,241,1)', borderWidth: 2, fill: chartType === 'line', tension: 0.4 }
+        { label: 'Pasivo', data: pasivos, backgroundColor: 'rgba(45,212,191,0.75)',  borderColor: '#2DD4BF',  borderWidth: 2, fill: chartType === 'line', tension: 0.4 },
+        { label: 'Activo', data: activos, backgroundColor: 'rgba(143,184,232,0.7)', borderColor: '#8FB8E8', borderWidth: 2, fill: chartType === 'line', tension: 0.4 }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend:  { labels:  { color: '#cbd5e1', font: { family: 'Inter', size: 12 } } },
-        tooltip: { backgroundColor: '#1e293b', titleColor: '#f1f5f9', bodyColor: '#94a3b8' }
+        legend:  { labels:  { color: '#C5D3E4', font: { family: 'Inter', size: 12 } } },
+        tooltip: { backgroundColor: '#1A2639', titleColor: '#EAF2FB', bodyColor: '#A3B4C9' }
       },
       scales: {
-        x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { ticks: { color: '#64748b', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+        x: { ticks: { color: '#8A9BB3' }, grid: { color: 'rgba(234,242,251,0.07)' } },
+        y: { ticks: { color: '#8A9BB3', stepSize: 1 }, grid: { color: 'rgba(234,242,251,0.07)' }, beginAtZero: true }
       }
     }
   });
@@ -844,6 +881,8 @@ function cambiarChart(tipo: 'bar' | 'line'): void {
   chartType = tipo;
   getEl('btn-chart-bar').classList.toggle('active',  tipo === 'bar');
   getEl('btn-chart-line').classList.toggle('active', tipo === 'line');
+  getEl('btn-chart-bar').setAttribute('aria-pressed', String(tipo === 'bar'));
+  getEl('btn-chart-line').setAttribute('aria-pressed', String(tipo === 'line'));
   renderChart(todosEventos);
 }
 
@@ -881,10 +920,10 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
   envioEnCurso = true;
   if (modo === 'PASIVO') histeresis.registrarEnvio(Date.now());
 
-  btn.disabled = true; btn.textContent = 'Procesando...';
+  btn.disabled = true; btn.textContent = 'Procesando…';
   simResult.className = 'sim-result';
   simResult.classList.remove('hidden');
-  simResult.textContent = 'Procesando...';
+  simResult.textContent = 'Procesando…';
 
   try {
     let etiquetasIA: string | null = null;
@@ -893,22 +932,32 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
       let dataUrl: string | null = null;
       if (fuenteImagen === 'cam' && streamActivo) {
         dataUrl = capturarFrame();
-        if (!dataUrl) throw new Error('No se pudo capturar frame');
+        if (!dataUrl) throw new Error('No se pudo capturar la imagen de la cámara');
       } else if (fuenteImagen === 'file') {
         const fi = getElOrNull('sim-imagen') as HTMLInputElement | null;
         if (fi?.files?.[0]) dataUrl = await imagenABase64(fi.files[0]);
       }
       if (dataUrl) {
-        simResult.textContent = 'Analizando con IA (COCO-SSD)...';
+        simResult.textContent = 'Analizando con IA (COCO-SSD)…';
         try {
-          const { etiquetas, esDuplicado } = await analizarConIA(dataUrl, distancia);
-          if (esDuplicado) {
-            simResult.textContent = `Detección duplicada (cooldown 5s): ${etiquetas || 'sin etiquetas'} — evento no enviado`;
+          const analisis = await analizarConIA(dataUrl, distancia);
+          const aviso = mensajeSinEvento(analisis);
+          if (aviso !== null) {
+            // Sin detección válida, duplicado u omitido: no se envía evento vacío al backend
+            simResult.textContent = aviso;
             simResult.classList.add('info');
             return;
           }
-          etiquetasIA = etiquetas || null;
-        } catch (iaErr) { etiquetasIA = 'ERROR_IA: ' + (iaErr as Error).message; }
+          if (analisis.estado === 'ok') etiquetasIA = analisis.etiquetasFormateadas || null;
+        } catch (iaErr) {
+          // Error de análisis: no se envía evento al backend; se informa al usuario
+          const msgErr = (iaErr as Error).message;
+          simResult.textContent = msgErr === MENSAJE_ERROR_MODELO
+            ? msgErr
+            : 'Error de análisis: ' + msgErr;
+          simResult.classList.add('error');
+          return;
+        }
       }
     }
 
@@ -921,13 +970,13 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
     });
 
     if (res.status === 401) { await logout(); return; }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`el servidor rechazó el evento (error ${res.status})`);
 
     const data = await res.json() as EventoResponse;
     simResult.classList.add('success');
     const ia = data.etiquetasIA && data.etiquetasIA !== 'SIN_IMAGEN'
       ? ' | IA: ' + data.etiquetasIA : '';
-    simResult.textContent = `Evento #${data.id} - ${modo} | ${distancia} cm${ia}`;
+    simResult.textContent = `Evento #${data.id} · ${modo} | ${distancia} cm${ia}`;
 
     // Refrescar solo la primera página para ver el nuevo evento
     paginaActual = 0;
@@ -935,18 +984,26 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
 
   } catch (e) {
     simResult.classList.add('error');
-    simResult.textContent = 'Error: ' + (e as Error).message;
+    simResult.textContent = 'No se pudo enviar el evento: ' + (e as Error).message;
   } finally {
     envioEnCurso = false;
     btn.disabled = false; btn.textContent = 'Enviar evento';
   }
 }
 
+/** Detiene el envío automático y restaura el botón. Seguro de llamar aunque no esté activo. */
+function detenerAuto(): void {
+  if (autoInterval !== null) { clearInterval(autoInterval); autoInterval = null; }
+  if (!autoRunning) return;
+  autoRunning = false;
+  const btn = getElOrNull('btn-sim-auto');
+  if (btn) { btn.textContent = 'Auto (5s)'; btn.classList.remove('btn-danger'); }
+}
+
 function toggleAuto(): void {
   const btn = getEl('btn-sim-auto');
   if (autoRunning) {
-    if (autoInterval !== null) clearInterval(autoInterval);
-    autoRunning = false; btn.textContent = 'Auto (5s)'; btn.classList.remove('btn-danger');
+    detenerAuto();
   } else {
     autoRunning = true; btn.textContent = 'Detener auto'; btn.classList.add('btn-danger');
     void enviarSimulacion({ ignorarCooldown: true });
@@ -972,9 +1029,9 @@ function leerVoz(texto: string, btn: HTMLButtonElement): void {
   if (synth.speaking) { synth.cancel(); return; }
   const u = new SpeechSynthesisUtterance(`Obstáculo identificado: ${texto}`);
   u.lang = 'es-ES'; u.rate = 0.9;
-  u.onstart = (): void => { btn.textContent = '⏹'; };
-  u.onend   = (): void => { btn.textContent = '🔊'; };
-  u.onerror = (): void => { btn.textContent = '🔊'; };
+  u.onstart = (): void => { btn.textContent = 'Parar'; };
+  u.onend   = (): void => { btn.textContent = 'Leer'; };
+  u.onerror = (): void => { btn.textContent = 'Leer'; };
   synth.speak(u);
 }
 
