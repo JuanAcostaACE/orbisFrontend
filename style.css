@@ -356,6 +356,53 @@ input, select, textarea { caret-color: var(--accent); }
 .btn-pag:disabled { opacity: 0.45; cursor: not-allowed; }
 .pag-info { font-size: 0.8125rem; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+/* ---------- Capturas analizadas ---------- */
+.capturas-card { margin-top: 24px; }
+.cap-actualizado { font-size: 0.8125rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cap-nota { font-size: 0.875rem; color: var(--text-muted); margin-bottom: 16px; }
+.capturas-lista { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.captura {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
+}
+.captura-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.captura-id { font-size: 0.8125rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.captura-fecha { margin-left: auto; font-size: 0.8125rem; color: var(--text-muted); white-space: nowrap; }
+.captura-desc { font-size: 0.9375rem; color: var(--text); overflow-wrap: anywhere; }
+.captura-desc--vacia { color: var(--text-muted); font-style: italic; }
+.captura-fallo { font-size: 0.875rem; color: var(--text); border-left: 3px solid var(--danger); padding-left: 10px; overflow-wrap: anywhere; }
+
+/* Estado: texto + glifo + color + estilo de borde (no depende solo del color) */
+.badge-captura {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 6px;
+  border: 1px solid currentColor; font-size: 0.75rem; font-weight: 700; white-space: nowrap;
+  color: var(--text-muted);
+}
+.badge-captura[data-estado="RECIBIDA"]   { color: var(--text); border-style: dotted; }
+.badge-captura[data-estado="EN_PROCESO"] { color: var(--warn); border-style: dashed; }
+.badge-captura[data-estado="DESCRITA"]   { color: var(--accent); border-style: solid; }
+.badge-captura[data-estado="ENTREGADA"]  { color: var(--info); border-style: solid; }
+.badge-captura[data-estado="FALLIDA"]    { color: var(--danger); border-style: double; border-width: 3px; }
+
+.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  padding: 2px 10px; border-radius: 999px; font-size: 0.8125rem;
+  background: var(--surface); border: 1px solid var(--border-strong); color: var(--text);
+  overflow-wrap: anywhere;
+}
+.error-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.error-banner.hidden { display: none; }
+.cap-reintentar { min-width: 0; }
+
+/* Enlace para saltar al contenido */
+.skip-link {
+  position: absolute; left: 16px; top: -64px; z-index: 200;
+  background: var(--accent); color: var(--accent-ink); padding: 10px 16px; border-radius: var(--radius-sm);
+  font-weight: 600; text-decoration: none;
+}
+.skip-link:focus { top: 8px; }
+.main:focus { outline: none; }
+
 /* ---------- Autenticación ---------- */
 .auth-screen {
   min-height: 100vh; display: flex; align-items: center; justify-content: center;
@@ -415,6 +462,7 @@ input, select, textarea { caret-color: var(--accent); }
   .table-filters { width: 100%; }
 }
 @media (max-width: 480px) {
+  .captura-fecha { margin-left: 0; width: 100%; }
   .header { padding: 0 16px; }
   .header-inner { height: auto; min-height: 64px; flex-wrap: wrap; gap: 8px 12px; padding: 8px 0; }
   .logo { flex: 1 1 auto; }
