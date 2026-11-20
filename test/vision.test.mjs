@@ -51,3 +51,19 @@ test('GestorVision: una inferencia en curso bloquea la siguiente (mutex)', async
   liberar();
   assert.equal((await enCurso).estado, 'ok');
 });
+
+test('GestorVision: descarta detecciones bajo el umbral de confianza', async () => {
+  const p = proveedorFalso({ detecciones: [det('Gato', 0.30), det('Perro', 0.54)] });
+  const g = new GestorVision(p, null, { ...SIN_ESPERA, minConfianza: 0.55 });
+  assert.deepEqual(await g.inferir({}), { estado: 'sin_deteccion' });
+});
+
+test('GestorVision: ordena por confianza y formatea las etiquetas', async () => {
+  const p = proveedorFalso({ detecciones: [det('Silla', 0.60), det('Persona', 0.91), det('Gato', 0.2)] });
+  const g = new GestorVision(p, null, SIN_ESPERA);
+  const r = await g.inferir({});
+  assert.equal(r.estado, 'ok');
+  assert.deepEqual(r.detecciones.map(d => d.clase), ['Persona', 'Silla']);
+  assert.equal(r.etiquetasFormateadas, 'Persona (91%), Silla (60%)');
+  assert.equal(r.proveedor, 'Falso');
+});
