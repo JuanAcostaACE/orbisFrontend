@@ -97,3 +97,27 @@ test('GestorVision: una distancia crítica salta el cooldown', async () => {
   assert.equal((await g.inferir({}, 20, 30)).esDuplicado, false, '20 cm < 30 cm');
   assert.equal((await g.inferir({}, 50, 30)).esDuplicado, true, '50 cm no es crítico');
 });
+
+test('GestorVision: usa el fallback si el proveedor primario no carga', async () => {
+  const primario = proveedorFalso({ nombre: 'Primario', listo: false, falloAlCargar: true });
+  const respaldo = proveedorFalso({ nombre: 'Respaldo', listo: false, detecciones: [det('Mesa', 0.7)] });
+  const g = new GestorVision(primario, respaldo, SIN_ESPERA);
+  const errores = console.error; console.error = () => {};
+  try {
+    assert.equal(await g.inicializarAsync(), 'Respaldo (fallback)');
+  } finally { console.error = errores; }
+  assert.equal(g.listo(), true);
+  assert.equal((await g.inferir({})).proveedor, 'Respaldo');
+});
+
+test('GestorVision: si ningún modelo carga, lanza el mensaje para el usuario', async () => {
+  const errores = console.error; console.error = () => {};
+  try {
+    const sinRespaldo = new GestorVision(proveedorFalso({ listo: false, falloAlCargar: true }));
+    await assert.rejects(sinRespaldo.inicializarAsync(), { message: MENSAJE_ERROR_MODELO });
+    const ambosFallan = new GestorVision(
+      proveedorFalso({ listo: false, falloAlCargar: true }),
+      proveedorFalso({ listo: false, falloAlCargar: true }));
+    await assert.rejects(ambosFallan.inicializarAsync(), { message: MENSAJE_ERROR_MODELO });
+  } finally { console.error = errores; }
+});
