@@ -65,20 +65,16 @@ La URL del backend sale de `vercel.json` (produccion) o de `localhost:8080` (des
 
 ## Ejecutar localmente
 
-Opcion 1 — Directamente en el navegador:
-```bash
-# Abre el archivo directamente
-start index.html   # Windows
-open index.html    # macOS
-```
+`app.js` se carga como modulo (`<script type="module">`), y los navegadores no cargan modulos desde `file://`. Por eso hay que servir la carpeta con un servidor HTTP:
 
-Opcion 2 — Con un servidor HTTP simple (recomendado para evitar CORS en fetch):
 ```bash
 # Python 3
 python -m http.server 3000
 
 # Luego abre: http://localhost:3000
 ```
+
+Para iniciar sesion y ver eventos, el backend debe estar corriendo en `http://localhost:8080`.
 
 ---
 
