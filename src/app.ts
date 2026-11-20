@@ -41,7 +41,6 @@ interface AuthResponse {
 }
 
 import { gestorVision, MENSAJE_ERROR_MODELO, type ResultadoInferencia, type Deteccion } from './vision.js';
-import { HisteresisPasiva, nivelDistancia, UMBRAL_CRITICO_CM } from './alertas.js';
 import { CAP_REFRESH_MS, cargarCapturas, iniciarCapturas, iniciarPollingCapturas, detenerPollingCapturas, reiniciarCapturas } from './capturas.js';
 
 declare const Chart: any;
@@ -89,8 +88,7 @@ let fuenteImagen: 'cam' | 'file'    = 'cam';
 let usuarioActual: AuthResponse | null = null;
 const synth: SpeechSynthesis | null = window.speechSynthesis ?? null;
 
-// Anti-saturación PASIVO (histéresis 100/115 cm + cooldown 5 s) — ver alertas.ts
-const histeresis = new HisteresisPasiva();
+// Evita dos envíos simultáneos
 let envioEnCurso = false;
 
 // Polling del dashboard
@@ -177,8 +175,6 @@ function mostrarPantallaAuth(): void {
   reiniciarCapturas();
   detenerAuto();          // ninguna sesión termina con envíos automáticos en marcha
   detenerCamara();
-  histeresis.reiniciar();
-  limpiarPeligro();
   ultimaFirma = '';
   getEl('pantalla-auth').classList.remove('hidden');
   getEl('pantalla-dashboard').classList.add('hidden');
@@ -310,14 +306,6 @@ function iniciarDashboard(): void {
   getEl('btn-chart-bar').addEventListener('click', () => cambiarChart('bar'));
   getEl('btn-chart-line').addEventListener('click', () => cambiarChart('line'));
 
-  (getEl('sim-distancia') as HTMLInputElement).addEventListener('input', function(): void {
-    const valor = parseFloat((this as HTMLInputElement).value);
-    const lbl = getElOrNull('sim-distancia-val');
-    if (lbl) lbl.textContent = `${valor} cm`;
-    // Alerta local inmediata (sin red). El POST solo ocurre al ENTRAR en peligro y fuera de cooldown.
-    procesarDistanciaSimulador(valor, true);
-  });
-
   getEl('btn-sim-enviar').addEventListener('click', () => { void enviarSimulacion(); });
   getEl('btn-sim-auto').addEventListener('click', toggleAuto);
 
@@ -325,11 +313,6 @@ function iniciarDashboard(): void {
   const filtroBuscar = getEl('filtro-buscar') as HTMLInputElement;
   filtroModo.addEventListener('change', renderTabla);
   filtroBuscar.addEventListener('input', renderTabla);
-
-  (getEl('sim-modo') as HTMLSelectElement).addEventListener('change', function(): void {
-    const grupo = getElOrNull('grupo-camara');
-    if (grupo) grupo.classList.toggle('hidden', (this as HTMLSelectElement).value !== 'ACTIVO');
-  });
 
   getEl('btn-src-cam').addEventListener('click', () => cambiarFuente('cam'));
   getEl('btn-src-file').addEventListener('click', () => cambiarFuente('file'));
@@ -376,10 +359,7 @@ async function cargarModeloIA(): Promise<void> {
   }
 }
 
-async function analizarConIA(
-  dataUrl: string,
-  distanciaActual?: number
-): Promise<ResultadoInferencia> {
+async function analizarConIA(dataUrl: string): Promise<ResultadoInferencia> {
   if (!gestorVision.listo()) {
     await gestorVision.inicializarAsync();
   }
@@ -396,11 +376,7 @@ async function analizarConIA(
     elemento = img;
   }
 
-  const resultado: ResultadoInferencia = await gestorVision.inferir(
-    elemento,
-    distanciaActual,
-    UMBRAL_CRITICO_CM   // distancia crítica: fuerza el envío aunque sea duplicado
-  );
+  const resultado: ResultadoInferencia = await gestorVision.inferir(elemento);
 
   // Bounding boxes solo sobre el video en vivo (coordenadas del frame del video)
   if (resultado.estado === 'ok' && elemento === video) dibujarDetecciones(resultado.detecciones);
@@ -640,62 +616,6 @@ function refrescarEstado(extra = ''): void {
   if (el.textContent !== texto) el.textContent = texto;
 }
 
-// ----------------------------------------------------------------
-// ALERTA LOCAL (visual + sonora + vibración) — sin depender de la red
-// ----------------------------------------------------------------
-function beepLocal(): void {
-  try {
-    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (AC) {
-      audioCtx = audioCtx ?? new AC();
-      const osc  = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = 880;
-      gain.gain.value = 0.08;
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.25);
-    }
-  } catch { /* audio no disponible hasta que haya gesto del usuario */ }
-  try { navigator.vibrate?.(200); } catch { /* sin vibración */ }
-}
-
-function anunciarPeligro(distancia: number): void {
-  const el = getElOrNull('alerta-peligro');
-  const nivel = nivelDistancia(distancia);
-  if (el) {
-    el.textContent = nivel === 'CRITICO'
-      ? `PELIGRO CRÍTICO: obstáculo a ${distancia} cm`
-      : `PELIGRO: obstáculo a ${distancia} cm`;
-  }
-  beepLocal();
-}
-
-function limpiarPeligro(): void {
-  const el = getElOrNull('alerta-peligro');
-  if (el) el.textContent = '';
-}
-
-/**
- * Procesa una lectura del slider del simulador.
- *  - La alerta local reacciona al instante (histéresis 100/115 cm).
- *  - En modo PASIVO se envía UN solo POST al entrar en peligro y solo si pasó el cooldown.
- *    Mover el slider dentro de la zona de peligro NO genera peticiones.
- */
-function procesarDistanciaSimulador(distancia: number, permitirEnvio: boolean): void {
-  const r = histeresis.evaluar(distancia);
-  if (r.entroEnPeligro) anunciarPeligro(distancia);
-  if (r.salioDePeligro) limpiarPeligro();
-  if (!r.entroEnPeligro || !permitirEnvio) return;
-
-  const modo = (getElOrNull('sim-modo') as HTMLSelectElement | null)?.value;
-  if (modo === 'PASIVO' && histeresis.puedeEnviar(Date.now())) {
-    void enviarSimulacion();
-  }
-}
-
 function actualizarControlPaginacion(p: PaginaResponse): void {
   const info = getElOrNull('pag-info');
   if (info) info.textContent = `Página ${p.paginaActual + 1} de ${Math.max(p.totalPaginas, 1)} · ${p.totalElementos} eventos`;
@@ -710,21 +630,11 @@ function actualizarControlPaginacion(p: PaginaResponse): void {
 // KPIs
 // ----------------------------------------------------------------
 function actualizarKPIs(): void {
-  const pasivos = todosEventos.filter(e => e.modo?.toUpperCase() === 'PASIVO');
-  const activos = todosEventos.filter(e => e.modo?.toUpperCase() === 'ACTIVO');
-  const dists   = todosEventos.filter(e => e.distanciaCm != null).map(e => e.distanciaCm);
-  const prom    = dists.length ? (dists.reduce((a, b) => a + b, 0) / dists.length).toFixed(1) + ' cm' : '--';
-
   const countTotal  = getElOrNull('count-total');
-  const countPasivo = getElOrNull('count-pasivo');
   const countActivo = getElOrNull('count-activo');
-  const avgDist     = getElOrNull('avg-distancia');
-
   // Mostramos el total general (totalEventos) en el KPI, no solo el de la página
   if (countTotal)  countTotal.textContent  = String(totalEventos);
-  if (countPasivo) countPasivo.textContent = String(pasivos.length);
-  if (countActivo) countActivo.textContent = String(activos.length);
-  if (avgDist)     avgDist.textContent     = prom;
+  if (countActivo) countActivo.textContent = String(todosEventos.filter(e => e.modo?.toUpperCase() === 'ACTIVO').length);
 }
 
 // ----------------------------------------------------------------
@@ -792,17 +702,7 @@ function renderTabla(): void {
     // Distancia + nivel con icono y texto explícito (no depende solo del color)
     const tdDist = document.createElement('td');
     tdDist.className = 'td-dist';
-    if (e.distanciaCm != null) {
-      tdDist.appendChild(document.createTextNode(`${e.distanciaCm.toFixed(1)} cm`));
-      const nivel = nivelDistancia(e.distanciaCm);
-      const nb = document.createElement('span');
-      nb.className = 'badge-dist';
-      nb.setAttribute('data-nivel', nivel);
-      nb.textContent = nivel === 'CRITICO' ? 'CRÍTICO' : nivel === 'PELIGRO' ? 'PELIGRO' : 'SEGURO';
-      tdDist.appendChild(nb);
-    } else {
-      tdDist.textContent = '--';
-    }
+    tdDist.textContent = '--'; // sin sensor de distancia en modo activo
     tr.appendChild(tdDist);
     // Mismo criterio que el mensaje de confirmación: SIN_IMAGEN no se muestra
     const etiquetasVisibles = e.etiquetasIA && e.etiquetasIA !== 'SIN_IMAGEN'
@@ -833,7 +733,7 @@ function renderTabla(): void {
 // GRÁFICA
 // ----------------------------------------------------------------
 function renderChart(eventos: EventoResponse[]): void {
-  const grupos: Record<string, { PASIVO: number; ACTIVO: number }> = {};
+  const grupos: Record<string, number> = {};
   [...eventos]
     .sort((a, b) => tiempoEvento(a) - tiempoEvento(b))
     .slice(-20)
@@ -841,14 +741,12 @@ function renderChart(eventos: EventoResponse[]): void {
       const dia = e.fechaHora
         ? new Date(e.fechaHora).toLocaleDateString('es-CO', { month: 'short', day: 'numeric' })
         : '?';
-      if (!grupos[dia]) grupos[dia] = { PASIVO: 0, ACTIVO: 0 };
-      if (e.modo?.toUpperCase() === 'ACTIVO') grupos[dia].ACTIVO++;
-      else grupos[dia].PASIVO++;
+      if (e.modo?.toUpperCase() !== 'ACTIVO') return;
+      grupos[dia] = (grupos[dia] ?? 0) + 1;
     });
 
   const labels  = Object.keys(grupos);
-  const pasivos = labels.map(l => grupos[l].PASIVO);
-  const activos = labels.map(l => grupos[l].ACTIVO);
+  const activos = labels.map(l => grupos[l]);
 
   if (chart) chart.destroy();
   const canvas = getElOrNull('eventos-chart') as HTMLCanvasElement | null;
@@ -859,7 +757,6 @@ function renderChart(eventos: EventoResponse[]): void {
     data: {
       labels,
       datasets: [
-        { label: 'Pasivo', data: pasivos, backgroundColor: 'rgba(45,212,191,0.75)',  borderColor: '#2DD4BF',  borderWidth: 2, fill: chartType === 'line', tension: 0.4 },
         { label: 'Activo', data: activos, backgroundColor: 'rgba(143,184,232,0.7)', borderColor: '#8FB8E8', borderWidth: 2, fill: chartType === 'line', tension: 0.4 }
       ]
     },
@@ -898,27 +795,16 @@ function imagenABase64(file: File): Promise<string> {
   });
 }
 
-interface OpcionesEnvio { ignorarCooldown?: boolean }
-
-async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
-  const modo      = (getEl('sim-modo')      as HTMLSelectElement).value;
-  const distancia = parseFloat((getEl('sim-distancia') as HTMLInputElement).value);
+async function enviarSimulacion(): Promise<void> {
+  const modo      = 'ACTIVO';
+  // El bastón no tiene sensor de distancia; el backend exige el campo, así que se envía 0.
+  const distancia = 0;
   const btn       = getEl('btn-sim-enviar') as HTMLButtonElement;
   const simResult = getEl('sim-result');
 
-  // Anti-saturación: nunca dos envíos simultáneos, y en PASIVO respeta el cooldown.
-  // La alerta local ya se disparó antes y no depende de este envío.
+  // Nunca dos envíos simultáneos
   if (envioEnCurso) return;
-  if (modo === 'PASIVO' && !opts.ignorarCooldown) {
-    const restante = histeresis.restanteMs(Date.now());
-    if (restante > 0) {
-      simResult.className = 'sim-result info';
-      simResult.textContent = `Cooldown activo: espera ${Math.ceil(restante / 1000)} s para enviar otro evento PASIVO (la alerta local sigue funcionando).`;
-      return;
-    }
-  }
   envioEnCurso = true;
-  if (modo === 'PASIVO') histeresis.registrarEnvio(Date.now());
 
   btn.disabled = true; btn.textContent = 'Procesando…';
   simResult.className = 'sim-result';
@@ -940,7 +826,7 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
       if (dataUrl) {
         simResult.textContent = 'Analizando con IA (COCO-SSD)…';
         try {
-          const analisis = await analizarConIA(dataUrl, distancia);
+          const analisis = await analizarConIA(dataUrl);
           const aviso = mensajeSinEvento(analisis);
           if (aviso !== null) {
             // Sin detección válida, duplicado u omitido: no se envía evento vacío al backend
@@ -976,7 +862,7 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
     simResult.classList.add('success');
     const ia = data.etiquetasIA && data.etiquetasIA !== 'SIN_IMAGEN'
       ? ' | IA: ' + data.etiquetasIA : '';
-    simResult.textContent = `Evento #${data.id} · ${modo} | ${distancia} cm${ia}`;
+    simResult.textContent = `Evento #${data.id} · ${modo}${ia}`;
 
     // Refrescar solo la primera página para ver el nuevo evento
     paginaActual = 0;
@@ -1006,18 +892,8 @@ function toggleAuto(): void {
     detenerAuto();
   } else {
     autoRunning = true; btn.textContent = 'Detener auto'; btn.classList.add('btn-danger');
-    void enviarSimulacion({ ignorarCooldown: true });
-    autoInterval = window.setInterval(() => {
-      const modos = ['PASIVO', 'ACTIVO'];
-      const sel = getEl('sim-modo') as HTMLSelectElement;
-      sel.value = modos[Math.floor(Math.random() * modos.length)];
-      const d = Math.floor(Math.random() * 150) + 10;
-      (getEl('sim-distancia') as HTMLInputElement).value = String(d);
-      const lbl = getElOrNull('sim-distancia-val');
-      if (lbl) lbl.textContent = d + ' cm';
-      procesarDistanciaSimulador(d, false);   // alerta local; el envío lo hace el propio intervalo (5 s)
-      void enviarSimulacion({ ignorarCooldown: true });
-    }, 5000);
+    void enviarSimulacion();
+    autoInterval = window.setInterval(() => { void enviarSimulacion(); }, 5000);
   }
 }
 
