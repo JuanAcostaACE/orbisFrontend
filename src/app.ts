@@ -383,8 +383,12 @@ async function analizarConIA(dataUrl: string): Promise<ResultadoInferencia> {
     elemento = video;
   } else {
     const img = new Image();
-    img.src = dataUrl;
-    await new Promise<void>(r => { img.onload = () => r(); });
+    // Sin onerror, una imagen corrupta o un formato no soportado dejaba el análisis colgado
+    await new Promise<void>((resolve, reject) => {
+      img.onload  = () => resolve();
+      img.onerror = () => reject(new Error('no se pudo leer la imagen seleccionada'));
+      img.src = dataUrl;
+    });
     elemento = img;
   }
 
