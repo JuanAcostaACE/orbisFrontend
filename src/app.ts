@@ -273,6 +273,12 @@ async function enviarRegistro(): Promise<void> {
   const correo  = (getElOrNull('reg-correo') as HTMLInputElement)?.value.trim() ?? '';
   const pass    = (getElOrNull('reg-pass')   as HTMLInputElement)?.value ?? '';
   if (!nombre || !correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
+  if (pass.length < 8) { mostrarMsgAuth('La contraseña debe tener al menos 8 caracteres'); return; }
+  // Mismo límite que el backend: BCrypt solo procesa 72 bytes (tildes y emojis ocupan más de 1)
+  if (new TextEncoder().encode(pass).length > 72) {
+    mostrarMsgAuth('La contraseña es demasiado larga (máximo 72 bytes)');
+    return;
+  }
   const btn = getEl('btn-registro') as HTMLButtonElement;
   btn.disabled = true;
   btn.textContent = 'Creando cuenta…';
