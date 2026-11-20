@@ -1,7 +1,7 @@
 // Tests de las funciones puras de src/capturas.ts (se ejecutan sobre dist/ tras tsc).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fechaRelativa } from '../dist/capturas.js';
+import { fechaRelativa, capMensajeError, capIdCorto } from '../dist/capturas.js';
 
 const AHORA = Date.parse('2026-11-20T12:00:00Z');
 const hace = (ms) => new Date(AHORA - ms).toISOString();
@@ -53,4 +53,18 @@ test('fechaRelativa: fecha futura (reloj desfasado) muestra la fecha absoluta', 
 test('fechaRelativa: un desfase menor de 1 min se trata como "justo ahora"', () => {
   const casi = new Date(AHORA + 30_000).toISOString();
   assert.equal(fechaRelativa(casi, AHORA), 'justo ahora');
+});
+
+test('capMensajeError: mensajes específicos para 403, 404 y 5xx', () => {
+  assert.equal(capMensajeError(403), 'No tienes permiso para ver las capturas.');
+  assert.equal(capMensajeError(404), 'El servicio de capturas no está disponible todavía.');
+  assert.match(capMensajeError(500), /error 500\)\. Se reintentará/);
+  assert.match(capMensajeError(503), /error 503/);
+});
+
+test('capMensajeError: otros códigos y fallos de red', () => {
+  assert.equal(capMensajeError(400), 'No se pudieron cargar las capturas (error 400).');
+  assert.equal(capMensajeError(null), 'Sin conexión con el servidor. Se reintentará automáticamente.');
+  assert.equal(capMensajeError(null, new Error('timeout')),
+    'Sin conexión con el servidor (timeout). Se reintentará automáticamente.');
 });
