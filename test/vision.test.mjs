@@ -28,3 +28,15 @@ test('GestorVision: omite la inferencia si el modelo no está listo', async () =
   assert.deepEqual(await g.inferir({}), { estado: 'omitida', motivo: 'no_listo' });
   assert.equal(p.llamadas, 0);
 });
+
+test('GestorVision: throttle entre inferencias seguidas', async () => {
+  const p = proveedorFalso({ detecciones: [det('Silla', 0.9)] });
+  const g = new GestorVision(p, null, { minInferenceMs: 60_000 });
+  // La primera llamada puede ejecutarse u omitirse según cuánto lleve vivo el proceso
+  // (performance.now() empieza en 0); la segunda, inmediata, siempre cae en el throttle.
+  await g.inferir({});
+  const antes = p.llamadas;
+  const segunda = await g.inferir({});
+  assert.deepEqual(segunda, { estado: 'omitida', motivo: 'throttle' });
+  assert.equal(p.llamadas, antes, 'el proveedor no se llama durante el throttle');
+});
