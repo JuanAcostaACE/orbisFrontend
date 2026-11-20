@@ -42,6 +42,7 @@ interface AuthResponse {
 
 import { gestorVision, MENSAJE_ERROR_MODELO, type ResultadoInferencia, type Deteccion } from './vision.js';
 import { HisteresisPasiva, nivelDistancia, UMBRAL_CRITICO_CM } from './alertas.js';
+import { CAP_REFRESH_MS, cargarCapturas, iniciarCapturas, iniciarPollingCapturas, detenerPollingCapturas, reiniciarCapturas } from './capturas.js';
 
 declare const Chart: any;
 
@@ -173,6 +174,7 @@ async function logout(): Promise<void> {
 
 function mostrarPantallaAuth(): void {
   detenerPolling();
+  reiniciarCapturas();
   detenerAuto();          // ninguna sesión termina con envíos automáticos en marcha
   detenerCamara();
   histeresis.reiniciar();
@@ -208,6 +210,8 @@ function mostrarMsgAuth(msg: string, esError = true): void {
 function mostrarTabAuth(tab: 'login' | 'registro'): void {
   getEl('tab-login').classList.toggle('active', tab === 'login');
   getEl('tab-registro').classList.toggle('active', tab === 'registro');
+  getEl('tab-login').setAttribute('aria-selected', String(tab === 'login'));
+  getEl('tab-registro').setAttribute('aria-selected', String(tab === 'registro'));
   getEl('form-login').classList.toggle('hidden', tab !== 'login');
   getEl('form-registro').classList.toggle('hidden', tab !== 'registro');
   mostrarMsgAuth('');
@@ -251,7 +255,7 @@ async function enviarLogin(): Promise<void> {
   if (!correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
   const btn = getEl('btn-login') as HTMLButtonElement;
   btn.disabled = true;
-  btn.textContent = 'Iniciando...';
+  btn.textContent = 'Iniciando sesión…';
   try {
     await login(correo, pass);
     mostrarDashboard();
@@ -271,7 +275,7 @@ async function enviarRegistro(): Promise<void> {
   if (!nombre || !correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
   const btn = getEl('btn-registro') as HTMLButtonElement;
   btn.disabled = true;
-  btn.textContent = 'Registrando...';
+  btn.textContent = 'Creando cuenta…';
   try {
     await registro(nombre, correo, pass);
     mostrarTabAuth('login');
@@ -288,6 +292,11 @@ function iniciarDashboard(): void {
   paginaActual = 0;
   ultimaFirma = '';
   void cargarEventos({ forzar: true });
+  iniciarCapturas({
+    apiBase: API_BASE,
+    fetchApi: apiFetch,
+    alExpirarSesion: () => { usuarioActual = null; mostrarPantallaAuth(); }
+  }, false);
   iniciarPolling();
   refrescarEstado();
 
@@ -296,7 +305,7 @@ function iniciarDashboard(): void {
 
   cargarModeloIA().catch(() => {});
 
-  getEl('btn-refresh').addEventListener('click', () => { paginaActual = 0; void cargarEventos({ forzar: true }); });
+  getEl('btn-refresh').addEventListener('click', () => { paginaActual = 0; void cargarEventos({ forzar: true }); void cargarCapturas(true); });
   getEl('btn-poll-toggle').addEventListener('click', togglePolling);
   getEl('btn-chart-bar').addEventListener('click', () => cambiarChart('bar'));
   getEl('btn-chart-line').addEventListener('click', () => cambiarChart('line'));
@@ -352,7 +361,7 @@ function iniciarDashboard(): void {
 async function cargarModeloIA(): Promise<void> {
   const statusEl = getElOrNull('ia-status');
   try {
-    if (statusEl) statusEl.textContent = 'Cargando modelo IA (COCO-SSD, ~6MB)...';
+    if (statusEl) statusEl.textContent = 'Cargando modelo IA (COCO-SSD, ~6 MB)…';
     const nombreCargado = await gestorVision.inicializarAsync();
     if (statusEl) {
       statusEl.textContent = `Modelo ${nombreCargado} listo`;
@@ -473,6 +482,8 @@ function cambiarFuente(fuente: 'cam' | 'file'): void {
   fuenteImagen = fuente;
   getEl('btn-src-cam').classList.toggle('active', fuente === 'cam');
   getEl('btn-src-file').classList.toggle('active', fuente === 'file');
+  getEl('btn-src-cam').setAttribute('aria-pressed', String(fuente === 'cam'));
+  getEl('btn-src-file').setAttribute('aria-pressed', String(fuente === 'file'));
   getEl('panel-cam').classList.toggle('hidden', fuente !== 'cam');
   getEl('panel-file').classList.toggle('hidden', fuente !== 'file');
   if (fuente !== 'cam') detenerCamara();
@@ -489,9 +500,13 @@ async function iniciarCamara(): Promise<void> {
     getEl('btn-cam-start').classList.add('hidden');
     getEl('btn-cam-stop').classList.remove('hidden');
     const status = getElOrNull('cam-status');
-    if (status) { status.textContent = 'Camara activa'; status.className = 'cam-status active'; }
+    if (status) { status.textContent = 'Cámara activa'; status.className = 'cam-status active'; }
   } catch (e) {
-    alert('No se pudo acceder a la camara: ' + (e as Error).message);
+    const status = getElOrNull('cam-status');
+    if (status) {
+      status.textContent = 'No se pudo acceder a la cámara: ' + (e as Error).message;
+      status.className = 'cam-status';
+    }
   }
 }
 
@@ -504,7 +519,7 @@ function detenerCamara(): void {
   getElOrNull('btn-cam-start')?.classList.remove('hidden');
   getElOrNull('btn-cam-stop')?.classList.add('hidden');
   const status = getElOrNull('cam-status');
-  if (status) { status.textContent = 'Camara inactiva'; status.className = 'cam-status'; }
+  if (status) { status.textContent = 'Cámara inactiva'; status.className = 'cam-status'; }
 }
 
 function capturarFrame(): string | null {
@@ -521,6 +536,10 @@ function capturarFrame(): string | null {
 // ----------------------------------------------------------------
 // FETCH — CARGAR EVENTOS (paginado)
 // ----------------------------------------------------------------
+class ErrorHttp extends Error {
+  constructor(public readonly status: number) { super(`HTTP ${status}`); }
+}
+
 interface OpcionesCarga { silencioso?: boolean; forzar?: boolean }
 
 /** Huella de la página para detectar si hubo cambios reales desde el último poll. */
@@ -542,7 +561,7 @@ async function cargarEventos(opts: OpcionesCarga = {}): Promise<void> {
       mostrarPantallaAuth();
       return;
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new ErrorHttp(res.status);
 
     const pagina = await res.json() as PaginaResponse;
     ocultarError();
@@ -564,8 +583,13 @@ async function cargarEventos(opts: OpcionesCarga = {}): Promise<void> {
     actualizarControlPaginacion(pagina);
 
   } catch (e) {
-    mostrarError(`Sin conexión: ${(e as Error).message}`);
-    refrescarEstado('sin conexión con el servidor');
+    if (e instanceof ErrorHttp) {
+      mostrarError(`El servidor no pudo entregar los eventos (error ${e.status}). Se reintentará automáticamente.`);
+      refrescarEstado('error del servidor');
+    } else {
+      mostrarError('Sin conexión con el servidor. Se reintentará automáticamente.');
+      refrescarEstado('sin conexión con el servidor');
+    }
   } finally {
     cargaEnCurso = false;
     mostrarCargando(false);
@@ -582,10 +606,12 @@ function iniciarPolling(): void {
     if (document.hidden) return;      // pestaña oculta: no consultar
     void cargarEventos({ silencioso: true });
   }, REFRESH_MS);
+  iniciarPollingCapturas();
 }
 
 function detenerPolling(): void {
   if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+  detenerPollingCapturas();
 }
 
 function togglePolling(): void {
@@ -600,6 +626,7 @@ function togglePolling(): void {
   } else {
     iniciarPolling();
     void cargarEventos({ silencioso: true });
+    void cargarCapturas(true);
   }
   refrescarEstado();
 }
@@ -608,7 +635,7 @@ function togglePolling(): void {
 function refrescarEstado(extra = ''): void {
   const el = getElOrNull('estado-sistema');
   if (!el) return;
-  const base = `Sistema operativo · Actualización automática ${pollPausado ? 'en pausa' : `activa (cada ${REFRESH_MS / 1000} s)`}`;
+  const base = `Sistema operativo · Actualización automática ${pollPausado ? 'en pausa' : `activa (eventos cada ${REFRESH_MS / 1000} s, capturas cada ${CAP_REFRESH_MS / 1000} s)`}`;
   const texto = extra ? `${base} · ${extra}` : base;
   if (el.textContent !== texto) el.textContent = texto;
 }
@@ -710,6 +737,12 @@ function tdText(text: string, className?: string): HTMLTableCellElement {
   return td;
 }
 
+/** Marca de tiempo del evento; 0 si falta o es inválida (evita NaN en el orden). */
+function tiempoEvento(e: EventoResponse): number {
+  const t = e.fechaHora ? new Date(e.fechaHora).getTime() : 0;
+  return Number.isNaN(t) ? 0 : t;
+}
+
 function renderTabla(): void {
   const filtroModo   = getEl('filtro-modo')   as HTMLSelectElement;
   const filtroBuscar = getEl('filtro-buscar') as HTMLInputElement;
@@ -725,17 +758,23 @@ function renderTabla(): void {
       (!modo   || e.modo?.toUpperCase() === modo) &&
       (!buscar || (e.etiquetasIA ?? '').toLowerCase().includes(buscar))
     )
-    .sort((a, b) => new Date(b.fechaHora!).getTime() - new Date(a.fechaHora!).getTime());
+    .sort((a, b) => tiempoEvento(b) - tiempoEvento(a));
 
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
   if (filtrados.length === 0) {
+    const msg = getElOrNull('empty-msg');
+    if (msg) {
+      msg.textContent = todosEventos.length > 0
+        ? 'Ningún evento de esta página coincide con los filtros.'
+        : 'Sin eventos. Usa el simulador o conecta el hardware.';
+    }
     emptyState.classList.remove('hidden');
     tableCount.textContent = '';
     return;
   }
   emptyState.classList.add('hidden');
-  tableCount.textContent = `${filtrados.length} evento${filtrados.length !== 1 ? 's' : ''}`;
+  tableCount.textContent = `${filtrados.length} evento${filtrados.length !== 1 ? 's' : ''} en esta página`;
 
   filtrados.forEach(e => {
     const tr = document.createElement('tr');
@@ -796,7 +835,7 @@ function renderTabla(): void {
 function renderChart(eventos: EventoResponse[]): void {
   const grupos: Record<string, { PASIVO: number; ACTIVO: number }> = {};
   [...eventos]
-    .sort((a, b) => new Date(a.fechaHora!).getTime() - new Date(b.fechaHora!).getTime())
+    .sort((a, b) => tiempoEvento(a) - tiempoEvento(b))
     .slice(-20)
     .forEach(e => {
       const dia = e.fechaHora
@@ -842,6 +881,8 @@ function cambiarChart(tipo: 'bar' | 'line'): void {
   chartType = tipo;
   getEl('btn-chart-bar').classList.toggle('active',  tipo === 'bar');
   getEl('btn-chart-line').classList.toggle('active', tipo === 'line');
+  getEl('btn-chart-bar').setAttribute('aria-pressed', String(tipo === 'bar'));
+  getEl('btn-chart-line').setAttribute('aria-pressed', String(tipo === 'line'));
   renderChart(todosEventos);
 }
 
@@ -879,10 +920,10 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
   envioEnCurso = true;
   if (modo === 'PASIVO') histeresis.registrarEnvio(Date.now());
 
-  btn.disabled = true; btn.textContent = 'Procesando...';
+  btn.disabled = true; btn.textContent = 'Procesando…';
   simResult.className = 'sim-result';
   simResult.classList.remove('hidden');
-  simResult.textContent = 'Procesando...';
+  simResult.textContent = 'Procesando…';
 
   try {
     let etiquetasIA: string | null = null;
@@ -891,13 +932,13 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
       let dataUrl: string | null = null;
       if (fuenteImagen === 'cam' && streamActivo) {
         dataUrl = capturarFrame();
-        if (!dataUrl) throw new Error('No se pudo capturar frame');
+        if (!dataUrl) throw new Error('No se pudo capturar la imagen de la cámara');
       } else if (fuenteImagen === 'file') {
         const fi = getElOrNull('sim-imagen') as HTMLInputElement | null;
         if (fi?.files?.[0]) dataUrl = await imagenABase64(fi.files[0]);
       }
       if (dataUrl) {
-        simResult.textContent = 'Analizando con IA (COCO-SSD)...';
+        simResult.textContent = 'Analizando con IA (COCO-SSD)…';
         try {
           const analisis = await analizarConIA(dataUrl, distancia);
           const aviso = mensajeSinEvento(analisis);
@@ -929,13 +970,13 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
     });
 
     if (res.status === 401) { await logout(); return; }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`el servidor rechazó el evento (error ${res.status})`);
 
     const data = await res.json() as EventoResponse;
     simResult.classList.add('success');
     const ia = data.etiquetasIA && data.etiquetasIA !== 'SIN_IMAGEN'
       ? ' | IA: ' + data.etiquetasIA : '';
-    simResult.textContent = `Evento #${data.id} - ${modo} | ${distancia} cm${ia}`;
+    simResult.textContent = `Evento #${data.id} · ${modo} | ${distancia} cm${ia}`;
 
     // Refrescar solo la primera página para ver el nuevo evento
     paginaActual = 0;
@@ -943,7 +984,7 @@ async function enviarSimulacion(opts: OpcionesEnvio = {}): Promise<void> {
 
   } catch (e) {
     simResult.classList.add('error');
-    simResult.textContent = 'Error: ' + (e as Error).message;
+    simResult.textContent = 'No se pudo enviar el evento: ' + (e as Error).message;
   } finally {
     envioEnCurso = false;
     btn.disabled = false; btn.textContent = 'Enviar evento';
