@@ -333,6 +333,8 @@ function iniciarDashboard(): void {
     const p = getElOrNull('sim-preview') as HTMLImageElement | null;
     const input = this as HTMLInputElement;
     if (p && input.files?.[0]) {
+      // Cada vista previa crea un ObjectURL: se libera el anterior para no acumular memoria
+      if (p.src.startsWith('blob:')) URL.revokeObjectURL(p.src);
       p.src = URL.createObjectURL(input.files[0]);
       p.classList.remove('hidden');
     }
@@ -381,8 +383,12 @@ async function analizarConIA(dataUrl: string): Promise<ResultadoInferencia> {
     elemento = video;
   } else {
     const img = new Image();
-    img.src = dataUrl;
-    await new Promise<void>(r => { img.onload = () => r(); });
+    // Sin onerror, una imagen corrupta o un formato no soportado dejaba el análisis colgado
+    await new Promise<void>((resolve, reject) => {
+      img.onload  = () => resolve();
+      img.onerror = () => reject(new Error('no se pudo leer la imagen seleccionada'));
+      img.src = dataUrl;
+    });
     elemento = img;
   }
 
@@ -724,7 +730,8 @@ function renderTabla(): void {
     const tieneIA = e.modo?.toUpperCase() === 'ACTIVO' &&
                     e.etiquetasIA && e.etiquetasIA !== 'SIN_IMAGEN' &&
                     !e.etiquetasIA.startsWith('ERROR');
-    if (tieneIA && e.etiquetasIA) {
+    // Sin síntesis de voz en el navegador no se ofrece un botón que solo mostraría un alert
+    if (tieneIA && e.etiquetasIA && synth) {
       const btn = document.createElement('button');
       btn.className = 'btn-voz'; btn.textContent = 'Leer';
       btn.setAttribute('aria-label', 'Leer etiquetas en voz alta');

@@ -5,7 +5,6 @@ Panel web (TypeScript sin framework) para monitorear el bastón inteligente ORBI
 | Documento | Contenido |
 |---|---|
 | [arquitectura.md](arquitectura.md) | Módulos y flujo de datos |
-| [alertas.md](alertas.md) | Histéresis y cooldown del modo PASIVO |
 | [vision.md](vision.md) | Detección de objetos en el navegador |
 | [capturas.md](capturas.md) | Panel de capturas analizadas |
 | [autenticacion.md](autenticacion.md) | Sesión y llamadas a la API |
