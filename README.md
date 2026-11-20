@@ -41,7 +41,7 @@ No requiere instalacion de dependencias. Es un sitio estatico puro.
 
 ## Configuracion de la URL del backend
 
-Edita la linea 13 de pp.js:
+Edita la linea 13 de `app.js`:
 
 ```javascript
 // ANTES (placeholder):
@@ -58,26 +58,26 @@ En desarrollo local, el frontend detecta automaticamente localhost y apunta a ht
 ## Variables de entorno
 
 Este proyecto **no usa variables de entorno** al ser estatico puro.
-La URL del backend se configura directamente en pp.js como se explica arriba.
+La URL del backend se configura directamente en `app.js` como se explica arriba.
 
 ---
 
 ## Ejecutar localmente
 
 Opcion 1 — Directamente en el navegador:
-`ash
+```bash
 # Abre el archivo directamente
 start index.html   # Windows
 open index.html    # macOS
-`
+```
 
 Opcion 2 — Con un servidor HTTP simple (recomendado para evitar CORS en fetch):
-`ash
+```bash
 # Python 3
 python -m http.server 3000
 
 # Luego abre: http://localhost:3000
-`
+```
 
 ---
 
@@ -92,14 +92,14 @@ python -m http.server 3000
 
 ## Estructura del proyecto
 
-`
+```
 orbisFrontend/
 ├── index.html    # Interfaz principal
 ├── style.css     # Estilos (dark mode, responsive)
 ├── app.js        # Logica: fetch API, render, Web Speech
 ├── .gitignore
 └── README.md
-`
+```
 
 ---
 
