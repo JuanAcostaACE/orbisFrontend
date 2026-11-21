@@ -28,32 +28,32 @@ const DIST   = path.join(__dirname, '..', 'dist');
 const OUTPUT = path.join(__dirname, '..', 'app.js');
 
 // Orden de concatenación: vision primero (lo importa app)
-const ARCHIVOS = ['vision.js', 'capturas.js', 'app.js'];
+const FILES = ['vision.js', 'captures.js', 'app.js'];
 
 async function run() {
-  const faltantes = ARCHIVOS.filter(f => !fs.existsSync(path.join(DIST, f)));
-  if (faltantes.length > 0) {
-    console.error(`[minify] ERROR: No encontrado en dist/: ${faltantes.join(', ')}`);
+  const missing = FILES.filter(f => !fs.existsSync(path.join(DIST, f)));
+  if (missing.length > 0) {
+    console.error(`[minify] ERROR: No encontrado en dist/: ${missing.join(', ')}`);
     console.error('         Ejecuta tsc primero.');
     process.exit(1);
   }
 
   // Concatenar módulos, eliminando import/export para compatibilidad IIFE
-  let fuentes = '';
-  for (const archivo of ARCHIVOS) {
-    let contenido = fs.readFileSync(path.join(DIST, archivo), 'utf-8');
+  let sources = '';
+  for (const fileName of FILES) {
+    let content = fs.readFileSync(path.join(DIST, fileName), 'utf-8');
     // Eliminar imports/exports inter-módulos (ya concatenados)
-    contenido = contenido
+    content = content
       .replace(/^import\s+[^;\n]*?from\s+['"]\.\/[\w-]+\.js['"]\s*;?[ \t]*\r?\n?/gm, '')
       .replace(/^export\s+(const|let|var|class|function|interface|type)\s+/gm, '$1 ')
       .replace(/^export\s+\{[^}]+\}\s*;?\s*/gm, '')
       .replace(/^export\s+default\s+/gm, 'const _default = ');
-    fuentes += `\n// ── ${archivo} ──\n` + contenido + '\n';
+    sources += `\n// ── ${fileName} ──\n` + content + '\n';
   }
 
-  const sizeAntes = Buffer.byteLength(fuentes, 'utf-8');
+  const sizeBefore = Buffer.byteLength(sources, 'utf-8');
 
-  const result = await minify(fuentes, {
+  const result = await minify(sources, {
     compress: {
       drop_console: false,
       passes: 2
@@ -73,13 +73,13 @@ async function run() {
 
   fs.writeFileSync(OUTPUT, result.code, 'utf-8');
 
-  const sizeDespues = Buffer.byteLength(result.code, 'utf-8');
-  const reduccion   = (((sizeAntes - sizeDespues) / sizeAntes) * 100).toFixed(1);
+  const sizeAfter = Buffer.byteLength(result.code, 'utf-8');
+  const reduction   = (((sizeBefore - sizeAfter) / sizeBefore) * 100).toFixed(1);
 
-  console.log(`[minify] OK: dist/{vision,capturas,app}.js → app.js (bundle)`);
-  console.log(`         Antes:   ${(sizeAntes / 1024).toFixed(1)} KB`);
-  console.log(`         Después: ${(sizeDespues / 1024).toFixed(1)} KB`);
-  console.log(`         Reducción: ${reduccion}%`);
+  console.log(`[minify] OK: dist/{vision,captures,app}.js → app.js (bundle)`);
+  console.log(`         Antes:   ${(sizeBefore / 1024).toFixed(1)} KB`);
+  console.log(`         Después: ${(sizeAfter / 1024).toFixed(1)} KB`);
+  console.log(`         Reducción: ${reduction}%`);
 }
 
 run().catch(e => { console.error('[minify] ERROR:', e.message); process.exit(1); });
