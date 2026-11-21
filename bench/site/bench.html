@@ -3,32 +3,32 @@
 <script crossorigin="anonymous" integrity="sha384-7qLdgfEQyO9ZQi9ArRHigK+IBto4XPk468jAqc+fnsXaZIcMAhQeLwzggRK7aESl" src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 <script crossorigin="anonymous" integrity="sha384-RPL/K8tc0JVaNWsunkEmCzLeieefvFX2UCRLKLmLVChCI6P+CTKhzqF7VIeCc3Zp" src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
 <script type="module">
-import { preprocesar, decodificarYolox, TAMANO_ENTRADA } from '/lib/yolo.js';
+import { preprocess, decodeYolox, INPUT_SIZE } from '/lib/yolo.js';
 // Copia fiel de preprocesar() de yolo.ts parametrizada por tamano (solo para YOLOX-S si su ONNX es 640).
-function preprocesarN(elem, T) {
-  const ancho = elem.naturalWidth, alto = elem.naturalHeight, ratio = Math.min(T / alto, T / ancho);
-  const rw = Math.floor(ancho * ratio), rh = Math.floor(alto * ratio);
+function preprocessN(elem, T) {
+  const imgWidth = elem.naturalWidth, imgHeight = elem.naturalHeight, ratio = Math.min(T / imgHeight, T / imgWidth);
+  const rw = Math.floor(imgWidth * ratio), rh = Math.floor(imgHeight * ratio);
   const c = document.createElement('canvas'); c.width = T; c.height = T;
   const ctx = c.getContext('2d', { willReadFrequently: true });
   ctx.fillStyle = 'rgb(114,114,114)'; ctx.fillRect(0, 0, T, T);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(elem, 0, 0, rw, rh);
-  const px = ctx.getImageData(0, 0, T, T).data, plano = T * T, datos = new Float32Array(3 * plano);
-  for (let i = 0; i < plano; i++) { datos[i] = px[i * 4 + 2]; datos[plano + i] = px[i * 4 + 1]; datos[2 * plano + i] = px[i * 4]; }
-  return { datos, ratio, ancho, alto };
+  const px = ctx.getImageData(0, 0, T, T).data, plane = T * T, tensorData = new Float32Array(3 * plane);
+  for (let i = 0; i < plane; i++) { tensorData[i] = px[i * 4 + 2]; tensorData[plane + i] = px[i * 4 + 1]; tensorData[2 * plane + i] = px[i * 4]; }
+  return { tensorData, ratio, imgWidth, imgHeight };
 }
 const heap = () => performance.memory ? performance.memory.usedJSHeapSize : null;
 window.runBench = async function (model, passes = 3, reps = 5, limit = 60) {
   const ds = await (await fetch('/dataset.json')).json();
-  const list = ds.imagenes.slice(0, limit);
+  const list = ds.images.slice(0, limit);
   const imgs = await Promise.all(list.map(async e => { const im = new Image(); im.src = '/img/' + e.file_name; await im.decode(); return im; }));
-  const info = { model, heapAntes: heap(), tfBackend: null };
+  const info = { model, heapBefore: heap(), tfBackend: null };
   const t0 = performance.now();
   let detect, T = null;
   if (model === 'ssd') {
     await tf.ready(); info.tfBackend = tf.getBackend();
     const m = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
     detect = async (im, conf) => (await m.detect(im, 100, conf)).map(d => ({ label: d.class, score: d.score, bbox: d.bbox }));
-    info.entrada = 'COCO-SSD lite_mobilenet_v2: resize interno del paquete (entrada dinamica)';
+    info.input = 'COCO-SSD lite_mobilenet_v2: resize interno del paquete (entrada dinamica)';
   } else {
     ort.env.wasm.numThreads = 1;
     const url = model === 'nano' ? '/models/yolox_nano.onnx' : '/models/yolox_s.onnx';
@@ -37,15 +37,15 @@ window.runBench = async function (model, passes = 3, reps = 5, limit = 60) {
     info.inputMeta = s.inputMetadata ? JSON.parse(JSON.stringify(s.inputMetadata)) : null;
     // el tamano lo fija el ONNX; se deduce del numero de salidas
     T = model === 'nano' ? 416 : 640; // el ONNX oficial de YOLOX-S es fijo 640x640 (verificado: 416 falla)
-    info.entrada = `YOLOX ${T}x${T} letterbox 114 BGR 0-255, wasm 1 hilo`;
+    info.input = `YOLOX ${T}x${T} letterbox 114 BGR 0-255, wasm 1 hilo`;
     detect = async (im, conf) => {
-      const p = T === TAMANO_ENTRADA ? preprocesar(im) : preprocesarN(im, T);
-      const o = await s.run({ [name]: new ort.Tensor('float32', p.datos, [1, 3, T, T]) });
+      const p = T === INPUT_SIZE ? preprocess(im) : preprocessN(im, T);
+      const o = await s.run({ [name]: new ort.Tensor('float32', p.tensorData, [1, 3, T, T]) });
       const out = o[s.outputNames[0]].data;
-      return decodificarYolox(out, p.ratio, p.ancho, p.alto, { confianza: conf, tamano: T }).map(d => ({ label: d.clase, score: d.confianza, bbox: d.bbox }));
+      return decodeYolox(out, p.ratio, p.imgWidth, p.imgHeight, { confidence: conf, size: T }).map(d => ({ label: d.label, score: d.confidence, bbox: d.bbox }));
     };
   }
-  info.cargaMs = performance.now() - t0; info.heapDespues = heap();
+  info.loadMs = performance.now() - t0; info.heapAfter = heap();
   await detect(imgs[0], 0.5); // calentamiento (1)
   const out = { info, passes: [] };
   for (let p = 0; p < passes; p++) {
