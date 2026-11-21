@@ -7,41 +7,41 @@
 // TIPOS
 // ----------------------------------------------------------------
 
-interface EventoResponse {
+interface EventResponse {
   id?: number;
-  modo: string;
-  distanciaCm: number;
-  etiquetasIA?: string | null;
-  fechaHora?: string;
-  obstaculoEtiqueta?: string | null;
-  obstaculoNivel?: string | null;
+  mode: string;
+  distanceCm: number;
+  aiLabels?: string | null;
+  createdAt?: string;
+  obstacleLabel?: string | null;
+  obstacleLevel?: string | null;
 }
 
-interface EventoRequest {
-  modo: string;
-  distanciaCm: number;
-  etiquetasIA?: string | null;
+interface EventRequest {
+  mode: string;
+  distanceCm: number;
+  aiLabels?: string | null;
 }
 
-interface PaginaResponse {
-  contenido: EventoResponse[];
-  paginaActual: number;
-  tamanioPagina: number;
-  totalElementos: number;
-  totalPaginas: number;
-  primera: boolean;
-  ultima: boolean;
+interface PageResponse {
+  content: EventResponse[];
+  currentPage: number;
+  pageSize: number;
+  totalElements: number;
+  totalPages: number;
+  first: boolean;
+  last: boolean;
 }
 
 interface AuthResponse {
   id?: number;
-  nombre?: string;
-  correo: string;
-  mensaje?: string;
+  name?: string;
+  email: string;
+  message?: string;
 }
 
-import { gestorVision, MENSAJE_ERROR_MODELO, type ResultadoInferencia, type Deteccion } from './vision.js';
-import { CAP_REFRESH_MS, cargarCapturas, iniciarCapturas, iniciarPollingCapturas, detenerPollingCapturas, reiniciarCapturas } from './capturas.js';
+import { visionManager, MODEL_ERROR_MESSAGE, type InferenceResult, type Detection } from './vision.js';
+import { CAP_REFRESH_MS, loadCaptures, startCaptures, startCapturesPolling, stopCapturesPolling, resetCaptures } from './captures.js';
 
 declare const Chart: any;
 
@@ -54,11 +54,18 @@ declare const Chart: any;
 // En local se apunta directamente al backend de desarrollo.
 const IS_LOCAL     = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 const API_BASE     = IS_LOCAL ? 'http://localhost:8080' : '';
-const EP_EVENTOS   = `${API_BASE}/api/v1/eventos`;
+const EP_EVENTS   = `${API_BASE}/api/v1/events`;
 const EP_AUTH      = `${API_BASE}/auth`;
 const REFRESH_MS   = 15000;
 const PAGE_SIZE    = 20;
 const OVERLAY_TTL_MS = 6000;   // tiempo que permanecen visibles las cajas dibujadas
+
+// Texto visible de cada modo (la API usa los valores en inglés)
+const MODE_LABELS: Record<string, string> = { ACTIVE: 'ACTIVO', PASSIVE: 'PASIVO' };
+function modeLabel(mode?: string | null): string {
+  if (!mode) return '--';
+  return MODE_LABELS[mode.toUpperCase()] ?? mode;
+}
 
 // ----------------------------------------------------------------
 // HELPERS DOM
@@ -75,28 +82,28 @@ function getElOrNull(id: string): HTMLElement | null {
 // ----------------------------------------------------------------
 // ESTADO GLOBAL
 // ----------------------------------------------------------------
-let todosEventos: EventoResponse[]  = [];
-let paginaActual: number            = 0;
-let totalPaginas: number            = 1;
-let totalEventos: number            = 0;
+let allEvents: EventResponse[]  = [];
+let currentPage: number            = 0;
+let totalPages: number            = 1;
+let totalEvents: number            = 0;
 let chart: any | null               = null;
 let chartType: 'bar' | 'line'       = 'bar';
 let autoInterval: number | null     = null;
 let autoRunning: boolean            = false;
-let streamActivo: MediaStream | null = null;
-let fuenteImagen: 'cam' | 'file'    = 'cam';
-let usuarioActual: AuthResponse | null = null;
+let activeStream: MediaStream | null = null;
+let imageSource: 'cam' | 'file'    = 'cam';
+let currentUser: AuthResponse | null = null;
 const synth: SpeechSynthesis | null = window.speechSynthesis ?? null;
 
 // Evita dos envíos simultáneos
-let envioEnCurso = false;
+let sendInProgress = false;
 
 // Polling del dashboard
 let pollTimer: number | null = null;
-let pollPausado = false;
-let cargaEnCurso = false;
-let ultimaFirma = '';
-let dashboardListo = false;   // los listeners se registran UNA sola vez (re-login no los duplica)
+let pollPaused = false;
+let loadInProgress = false;
+let lastSignature = '';
+let dashboardReady = false;   // los listeners se registran UNA sola vez (re-login no los duplica)
 
 // Overlay de bounding boxes
 let overlayTimer: number | null = null;
@@ -124,97 +131,97 @@ async function apiFetch(url: string, opts: RequestInit = {}): Promise<Response> 
 // AUTENTICACIÓN
 // ----------------------------------------------------------------
 
-async function verificarSesion(): Promise<boolean> {
+async function checkSession(): Promise<boolean> {
   try {
     const res = await apiFetch(`${EP_AUTH}/me`);
     if (res.ok) {
-      const data = await res.json() as { correo: string };
-      usuarioActual = { correo: data.correo };
+      const data = await res.json() as { email: string };
+      currentUser = { email: data.email };
       return true;
     }
   } catch { /* sin conexión */ }
   return false;
 }
 
-async function login(correo: string, contrasena: string): Promise<void> {
+async function login(email: string, password: string): Promise<void> {
   const res = await apiFetch(`${EP_AUTH}/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ correo, contrasena })
+    body: JSON.stringify({ email, password })
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ mensaje: `Error ${res.status}` }));
-    throw new Error(err.mensaje ?? `HTTP ${res.status}`);
+    const err = await res.json().catch(() => ({ message: `Error ${res.status}` }));
+    throw new Error(err.message ?? `HTTP ${res.status}`);
   }
-  usuarioActual = await res.json() as AuthResponse;
+  currentUser = await res.json() as AuthResponse;
 }
 
-async function registro(nombre: string, correo: string, contrasena: string): Promise<void> {
-  const res = await apiFetch(`${EP_AUTH}/registro`, {
+async function register(name: string, email: string, password: string): Promise<void> {
+  const res = await apiFetch(`${EP_AUTH}/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nombre, correo, contrasena })
+    body: JSON.stringify({ name, email, password })
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ mensaje: `Error ${res.status}` }));
-    throw new Error(err.mensaje ?? `HTTP ${res.status}`);
+    const err = await res.json().catch(() => ({ message: `Error ${res.status}` }));
+    throw new Error(err.message ?? `HTTP ${res.status}`);
   }
 }
 
 async function logout(): Promise<void> {
   await apiFetch(`${EP_AUTH}/logout`, { method: 'POST' }).catch(() => {});
-  usuarioActual = null;
-  paginaActual = 0;
-  todosEventos = [];
-  mostrarPantallaAuth();
+  currentUser = null;
+  currentPage = 0;
+  allEvents = [];
+  showAuthScreen();
 }
 
 // ----------------------------------------------------------------
 // GESTIÓN DE VISTAS
 // ----------------------------------------------------------------
 
-function mostrarPantallaAuth(): void {
-  detenerPolling();
-  reiniciarCapturas();
-  detenerAuto();          // ninguna sesión termina con envíos automáticos en marcha
-  detenerCamara();
-  ultimaFirma = '';
-  getEl('pantalla-auth').classList.remove('hidden');
-  getEl('pantalla-dashboard').classList.add('hidden');
-  limpiarFormAuth();
+function showAuthScreen(): void {
+  stopPolling();
+  resetCaptures();
+  stopAuto();          // ninguna sesión termina con envíos automáticos en marcha
+  stopCamera();
+  lastSignature = '';
+  getEl('auth-screen').classList.remove('hidden');
+  getEl('dashboard-screen').classList.add('hidden');
+  clearAuthForm();
 }
 
-function mostrarDashboard(): void {
-  getEl('pantalla-auth').classList.add('hidden');
-  getEl('pantalla-dashboard').classList.remove('hidden');
-  const correoEl = getElOrNull('usuario-correo');
-  if (correoEl && usuarioActual) correoEl.textContent = usuarioActual.correo;
+function showDashboard(): void {
+  getEl('auth-screen').classList.add('hidden');
+  getEl('dashboard-screen').classList.remove('hidden');
+  const emailEl = getElOrNull('user-email');
+  if (emailEl && currentUser) emailEl.textContent = currentUser.email;
 }
 
-function limpiarFormAuth(): void {
-  ['login-correo','login-pass','reg-nombre','reg-correo','reg-pass'].forEach(id => {
+function clearAuthForm(): void {
+  ['login-email','login-pass','reg-name','reg-email','reg-pass'].forEach(id => {
     const el = getElOrNull(id) as HTMLInputElement | null;
     if (el) el.value = '';
   });
-  mostrarMsgAuth('');
+  showAuthMessage('');
 }
 
-function mostrarMsgAuth(msg: string, esError = true): void {
-  const el = getElOrNull('auth-mensaje');
+function showAuthMessage(msg: string, isError = true): void {
+  const el = getElOrNull('auth-message');
   if (!el) return;
   el.textContent = msg;
-  el.className = 'auth-msg' + (esError && msg ? ' auth-msg--error' : msg ? ' auth-msg--ok' : '');
+  el.className = 'auth-msg' + (isError && msg ? ' auth-msg--error' : msg ? ' auth-msg--ok' : '');
 }
 
-function mostrarTabAuth(tab: 'login' | 'registro'): void {
+function showAuthTab(tab: 'login' | 'register'): void {
   getEl('tab-login').classList.toggle('active', tab === 'login');
-  getEl('tab-registro').classList.toggle('active', tab === 'registro');
+  getEl('tab-register').classList.toggle('active', tab === 'register');
   getEl('tab-login').setAttribute('aria-selected', String(tab === 'login'));
-  getEl('tab-registro').setAttribute('aria-selected', String(tab === 'registro'));
+  getEl('tab-register').setAttribute('aria-selected', String(tab === 'register'));
   getEl('form-login').classList.toggle('hidden', tab !== 'login');
-  getEl('form-registro').classList.toggle('hidden', tab !== 'registro');
-  mostrarMsgAuth('');
+  getEl('form-register').classList.toggle('hidden', tab !== 'register');
+  showAuthMessage('');
 }
 
 // ----------------------------------------------------------------
@@ -222,114 +229,114 @@ function mostrarTabAuth(tab: 'login' | 'registro'): void {
 // ----------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async (): Promise<void> => {
   // 1. Verificar sesión existente antes de mostrar cualquier UI
-  const haySession = await verificarSesion();
+  const hasSession = await checkSession();
 
-  if (haySession) {
-    mostrarDashboard();
-    iniciarDashboard();
+  if (hasSession) {
+    showDashboard();
+    startDashboard();
   } else {
-    mostrarPantallaAuth();
+    showAuthScreen();
   }
 
   // ── Listeners de autenticación ──
-  getEl('tab-login').addEventListener('click', () => mostrarTabAuth('login'));
-  getEl('tab-registro').addEventListener('click', () => mostrarTabAuth('registro'));
+  getEl('tab-login').addEventListener('click', () => showAuthTab('login'));
+  getEl('tab-register').addEventListener('click', () => showAuthTab('register'));
 
   // Formularios reales: Enter y el botón submit disparan el mismo handler
   getEl('form-login').addEventListener('submit', (e: Event): void => {
     e.preventDefault();
-    void enviarLogin();
+    void submitLogin();
   });
 
-  getEl('form-registro').addEventListener('submit', (e: Event): void => {
+  getEl('form-register').addEventListener('submit', (e: Event): void => {
     e.preventDefault();
-    void enviarRegistro();
+    void submitRegister();
   });
 
   getElOrNull('btn-logout')?.addEventListener('click', logout);
 });
 
-async function enviarLogin(): Promise<void> {
-  const correo = (getElOrNull('login-correo') as HTMLInputElement)?.value.trim() ?? '';
+async function submitLogin(): Promise<void> {
+  const email = (getElOrNull('login-email') as HTMLInputElement)?.value.trim() ?? '';
   const pass   = (getElOrNull('login-pass')   as HTMLInputElement)?.value ?? '';
-  if (!correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
+  if (!email || !pass) { showAuthMessage('Completa todos los campos'); return; }
   const btn = getEl('btn-login') as HTMLButtonElement;
   btn.disabled = true;
   btn.textContent = 'Iniciando sesión…';
   try {
-    await login(correo, pass);
-    mostrarDashboard();
-    iniciarDashboard();
+    await login(email, pass);
+    showDashboard();
+    startDashboard();
   } catch (e) {
-    mostrarMsgAuth((e as Error).message);
+    showAuthMessage((e as Error).message);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Iniciar sesión';
   }
 }
 
-async function enviarRegistro(): Promise<void> {
-  const nombre  = (getElOrNull('reg-nombre') as HTMLInputElement)?.value.trim() ?? '';
-  const correo  = (getElOrNull('reg-correo') as HTMLInputElement)?.value.trim() ?? '';
+async function submitRegister(): Promise<void> {
+  const name  = (getElOrNull('reg-name') as HTMLInputElement)?.value.trim() ?? '';
+  const email  = (getElOrNull('reg-email') as HTMLInputElement)?.value.trim() ?? '';
   const pass    = (getElOrNull('reg-pass')   as HTMLInputElement)?.value ?? '';
-  if (!nombre || !correo || !pass) { mostrarMsgAuth('Completa todos los campos'); return; }
-  if (pass.length < 8) { mostrarMsgAuth('La contraseña debe tener al menos 8 caracteres'); return; }
+  if (!name || !email || !pass) { showAuthMessage('Completa todos los campos'); return; }
+  if (pass.length < 8) { showAuthMessage('La contraseña debe tener al menos 8 caracteres'); return; }
   // Mismo límite que el backend: BCrypt solo procesa 72 bytes (tildes y emojis ocupan más de 1)
   if (new TextEncoder().encode(pass).length > 72) {
-    mostrarMsgAuth('La contraseña es demasiado larga (máximo 72 bytes)');
+    showAuthMessage('La contraseña es demasiado larga (máximo 72 bytes)');
     return;
   }
-  const btn = getEl('btn-registro') as HTMLButtonElement;
+  const btn = getEl('btn-register') as HTMLButtonElement;
   btn.disabled = true;
   btn.textContent = 'Creando cuenta…';
   try {
-    await registro(nombre, correo, pass);
-    mostrarTabAuth('login');
-    mostrarMsgAuth('Solicitud procesada. Inicia sesión para continuar.', false);
+    await register(name, email, pass);
+    showAuthTab('login');
+    showAuthMessage('Solicitud procesada. Inicia sesión para continuar.', false);
   } catch (e) {
-    mostrarMsgAuth((e as Error).message);
+    showAuthMessage((e as Error).message);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Crear cuenta';
   }
 }
 
-function iniciarDashboard(): void {
-  paginaActual = 0;
-  ultimaFirma = '';
-  void cargarEventos({ forzar: true });
-  iniciarCapturas({
+function startDashboard(): void {
+  currentPage = 0;
+  lastSignature = '';
+  void loadEvents({ force: true });
+  startCaptures({
     apiBase: API_BASE,
     fetchApi: apiFetch,
-    alExpirarSesion: () => { usuarioActual = null; mostrarPantallaAuth(); }
+    onSessionExpired: () => { currentUser = null; showAuthScreen(); }
   }, false);
-  iniciarPolling();
-  refrescarEstado();
+  startPolling();
+  refreshStatus();
 
-  if (dashboardListo) return;
-  dashboardListo = true;
+  if (dashboardReady) return;
+  dashboardReady = true;
 
-  cargarModeloIA().catch(() => {});
+  loadAIModel().catch(() => {});
 
-  getEl('btn-refresh').addEventListener('click', () => { paginaActual = 0; void cargarEventos({ forzar: true }); void cargarCapturas(true); });
+  getEl('btn-refresh').addEventListener('click', () => { currentPage = 0; void loadEvents({ force: true }); void loadCaptures(true); });
   getEl('btn-poll-toggle').addEventListener('click', togglePolling);
-  getEl('btn-chart-bar').addEventListener('click', () => cambiarChart('bar'));
-  getEl('btn-chart-line').addEventListener('click', () => cambiarChart('line'));
+  getEl('btn-chart-bar').addEventListener('click', () => switchChart('bar'));
+  getEl('btn-chart-line').addEventListener('click', () => switchChart('line'));
 
-  getEl('btn-sim-enviar').addEventListener('click', () => { void enviarSimulacion(); });
+  getEl('btn-sim-send').addEventListener('click', () => { void sendSimulation(); });
   getEl('btn-sim-auto').addEventListener('click', toggleAuto);
 
-  const filtroModo   = getEl('filtro-modo')   as HTMLSelectElement;
-  const filtroBuscar = getEl('filtro-buscar') as HTMLInputElement;
-  filtroModo.addEventListener('change', renderTabla);
-  filtroBuscar.addEventListener('input', renderTabla);
+  const modeFilter   = getEl('filter-mode')   as HTMLSelectElement;
+  const searchFilter = getEl('filter-search') as HTMLInputElement;
+  modeFilter.addEventListener('change', renderTable);
+  searchFilter.addEventListener('input', renderTable);
 
-  getEl('btn-src-cam').addEventListener('click', () => cambiarFuente('cam'));
-  getEl('btn-src-file').addEventListener('click', () => cambiarFuente('file'));
-  getEl('btn-cam-start').addEventListener('click', iniciarCamara);
-  getEl('btn-cam-stop').addEventListener('click', detenerCamara);
+  getEl('btn-src-cam').addEventListener('click', () => switchSource('cam'));
+  getEl('btn-src-file').addEventListener('click', () => switchSource('file'));
+  getEl('btn-cam-start').addEventListener('click', startCamera);
+  getEl('btn-cam-stop').addEventListener('click', stopCamera);
 
-  (getEl('sim-imagen') as HTMLInputElement).addEventListener('change', function(): void {
+  (getEl('sim-image') as HTMLInputElement).addEventListener('change', function(): void {
     const p = getElOrNull('sim-preview') as HTMLImageElement | null;
     const input = this as HTMLInputElement;
     if (p && input.files?.[0]) {
@@ -342,24 +349,24 @@ function iniciarDashboard(): void {
 
   // Paginación
   getElOrNull('btn-pag-prev')?.addEventListener('click', () => {
-    if (paginaActual > 0) { paginaActual--; cargarEventos(); }
+    if (currentPage > 0) { currentPage--; loadEvents(); }
   });
   getElOrNull('btn-pag-next')?.addEventListener('click', () => {
-    if (paginaActual < totalPaginas - 1) { paginaActual++; cargarEventos(); }
+    if (currentPage < totalPages - 1) { currentPage++; loadEvents(); }
   });
 }
 
 // ----------------------------------------------------------------
 // IA CON COCO-SSD (primario) + MobileNet (fallback)
-// Gestionado por GestorVision en vision.ts
+// Gestionado por VisionManager en vision.ts
 // ----------------------------------------------------------------
-async function cargarModeloIA(): Promise<void> {
+async function loadAIModel(): Promise<void> {
   const statusEl = getElOrNull('ia-status');
   try {
     if (statusEl) statusEl.textContent = 'Cargando modelo IA (COCO-SSD, ~6 MB)…';
-    const nombreCargado = await gestorVision.inicializarAsync();
+    const loadedName = await visionManager.initializeAsync();
     if (statusEl) {
-      statusEl.textContent = `Modelo ${nombreCargado} listo`;
+      statusEl.textContent = `Modelo ${loadedName} listo`;
       (statusEl as HTMLElement).style.color = '#2DD4BF';
     }
   } catch (e) {
@@ -371,16 +378,16 @@ async function cargarModeloIA(): Promise<void> {
   }
 }
 
-async function analizarConIA(dataUrl: string): Promise<ResultadoInferencia> {
-  if (!gestorVision.listo()) {
-    await gestorVision.inicializarAsync();
+async function analyzeWithAI(dataUrl: string): Promise<InferenceResult> {
+  if (!visionManager.ready()) {
+    await visionManager.initializeAsync();
   }
 
   const video = getElOrNull('cam-video') as HTMLVideoElement | null;
-  let elemento: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
+  let element: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
 
-  if (fuenteImagen === 'cam' && streamActivo && video) {
-    elemento = video;
+  if (imageSource === 'cam' && activeStream && video) {
+    element = video;
   } else {
     const img = new Image();
     // Sin onerror, una imagen corrupta o un formato no soportado dejaba el análisis colgado
@@ -389,45 +396,45 @@ async function analizarConIA(dataUrl: string): Promise<ResultadoInferencia> {
       img.onerror = () => reject(new Error('no se pudo leer la imagen seleccionada'));
       img.src = dataUrl;
     });
-    elemento = img;
+    element = img;
   }
 
-  const resultado: ResultadoInferencia = await gestorVision.inferir(elemento);
+  const result: InferenceResult = await visionManager.infer(element);
 
   // Bounding boxes solo sobre el video en vivo (coordenadas del frame del video)
-  if (resultado.estado === 'ok' && elemento === video) dibujarDetecciones(resultado.detecciones);
+  if (result.status === 'ok' && element === video) drawDetections(result.detections);
 
-  return resultado;
+  return result;
 }
 
 /** Mensaje de estado para un análisis que no produjo evento (nunca se envía vacío). */
-function mensajeSinEvento(r: ResultadoInferencia): string | null {
-  switch (r.estado) {
-    case 'omitida':
-      if (r.motivo === 'throttle') return 'Análisis omitido: espera ~1,2 s entre detecciones. Evento no enviado.';
-      if (r.motivo === 'ocupado')  return 'Hay un análisis de IA en curso. Evento no enviado.';
+function noEventMessage(r: InferenceResult): string | null {
+  switch (r.status) {
+    case 'skipped':
+      if (r.reason === 'throttle') return 'Análisis omitido: espera ~1,2 s entre detecciones. Evento no enviado.';
+      if (r.reason === 'busy')  return 'Hay un análisis de IA en curso. Evento no enviado.';
       return 'El modelo de IA aún no está listo. Evento no enviado.';
-    case 'sin_deteccion':
+    case 'no_detection':
       return 'La IA no detectó objetos con confianza suficiente (≥ 55 %). Evento no enviado.';
     case 'ok':
-      return r.esDuplicado ? `Detección duplicada (cooldown 5s): ${r.etiquetasFormateadas || 'sin etiquetas'} — evento no enviado` : null;
+      return r.isDuplicate ? `Detección duplicada (cooldown 5s): ${r.formattedLabels || 'sin etiquetas'} — evento no enviado` : null;
   }
 }
 
 // ----------------------------------------------------------------
 // OVERLAY DE BOUNDING BOXES (COCO-SSD) sobre el video
 // ----------------------------------------------------------------
-function limpiarOverlay(): void {
+function clearOverlay(): void {
   if (overlayTimer !== null) { clearTimeout(overlayTimer); overlayTimer = null; }
   const canvas = getElOrNull('cam-overlay') as HTMLCanvasElement | null;
   if (!canvas) return;
   canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
 }
 
-function dibujarDetecciones(dets: Deteccion[]): void {
+function drawDetections(dets: Detection[]): void {
   const video  = getElOrNull('cam-video')   as HTMLVideoElement  | null;
   const canvas = getElOrNull('cam-overlay') as HTMLCanvasElement | null;
-  if (!video || !canvas || !streamActivo) return;
+  if (!video || !canvas || !activeStream) return;
   const cw = video.clientWidth, ch = video.clientHeight;
   const vw = video.videoWidth,  vh = video.videoHeight;
   if (!cw || !ch || !vw || !vh) return;
@@ -441,9 +448,9 @@ function dibujarDetecciones(dets: Deteccion[]): void {
   ctx.clearRect(0, 0, cw, ch);
 
   // El video usa object-fit: contain -> escala uniforme + márgenes
-  const escala = Math.min(cw / vw, ch / vh);
-  const offX = (cw - vw * escala) / 2;
-  const offY = (ch - vh * escala) / 2;
+  const scale = Math.min(cw / vw, ch / vh);
+  const offX = (cw - vw * scale) / 2;
+  const offY = (ch - vh * scale) / 2;
 
   ctx.lineWidth = 3;
   ctx.font = 'bold 13px Inter, sans-serif';
@@ -451,44 +458,44 @@ function dibujarDetecciones(dets: Deteccion[]): void {
   dets.forEach(d => {
     if (!d.bbox) return;
     const [x, y, w, h] = d.bbox;
-    const rx = offX + x * escala, ry = offY + y * escala;
+    const rx = offX + x * scale, ry = offY + y * scale;
     ctx.strokeStyle = '#F5B94A';
-    ctx.strokeRect(rx, ry, w * escala, h * escala);
-    const etiqueta = `${d.clase} ${Math.round(d.confianza * 100)}%`;
-    const tw = ctx.measureText(etiqueta).width + 8;
+    ctx.strokeRect(rx, ry, w * scale, h * scale);
+    const label = `${d.label} ${Math.round(d.confidence * 100)}%`;
+    const tw = ctx.measureText(label).width + 8;
     const ty = Math.max(0, ry - 18);
     ctx.fillStyle = '#000';
     ctx.fillRect(rx, ty, tw, 18);
     ctx.fillStyle = '#F5B94A';
-    ctx.fillText(etiqueta, rx + 4, ty + 2);
+    ctx.fillText(label, rx + 4, ty + 2);
   });
 
   if (overlayTimer !== null) clearTimeout(overlayTimer);
-  overlayTimer = window.setTimeout(limpiarOverlay, OVERLAY_TTL_MS);
+  overlayTimer = window.setTimeout(clearOverlay, OVERLAY_TTL_MS);
 }
 
 // ----------------------------------------------------------------
 // CÁMARA
 // ----------------------------------------------------------------
-function cambiarFuente(fuente: 'cam' | 'file'): void {
-  fuenteImagen = fuente;
-  getEl('btn-src-cam').classList.toggle('active', fuente === 'cam');
-  getEl('btn-src-file').classList.toggle('active', fuente === 'file');
-  getEl('btn-src-cam').setAttribute('aria-pressed', String(fuente === 'cam'));
-  getEl('btn-src-file').setAttribute('aria-pressed', String(fuente === 'file'));
-  getEl('panel-cam').classList.toggle('hidden', fuente !== 'cam');
-  getEl('panel-file').classList.toggle('hidden', fuente !== 'file');
-  if (fuente !== 'cam') detenerCamara();
+function switchSource(source: 'cam' | 'file'): void {
+  imageSource = source;
+  getEl('btn-src-cam').classList.toggle('active', source === 'cam');
+  getEl('btn-src-file').classList.toggle('active', source === 'file');
+  getEl('btn-src-cam').setAttribute('aria-pressed', String(source === 'cam'));
+  getEl('btn-src-file').setAttribute('aria-pressed', String(source === 'file'));
+  getEl('panel-cam').classList.toggle('hidden', source !== 'cam');
+  getEl('panel-file').classList.toggle('hidden', source !== 'file');
+  if (source !== 'cam') stopCamera();
 }
 
-async function iniciarCamara(): Promise<void> {
+async function startCamera(): Promise<void> {
   try {
-    streamActivo = await navigator.mediaDevices.getUserMedia({
+    activeStream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' },
       audio: false
     });
     const video = getEl('cam-video') as HTMLVideoElement;
-    video.srcObject = streamActivo;
+    video.srcObject = activeStream;
     getEl('btn-cam-start').classList.add('hidden');
     getEl('btn-cam-stop').classList.remove('hidden');
     const status = getElOrNull('cam-status');
@@ -502,10 +509,10 @@ async function iniciarCamara(): Promise<void> {
   }
 }
 
-function detenerCamara(): void {
-  streamActivo?.getTracks().forEach(t => t.stop());
-  streamActivo = null;
-  limpiarOverlay();
+function stopCamera(): void {
+  activeStream?.getTracks().forEach(t => t.stop());
+  activeStream = null;
+  clearOverlay();
   const video = getElOrNull('cam-video') as HTMLVideoElement | null;
   if (video) video.srcObject = null;
   getElOrNull('btn-cam-start')?.classList.remove('hidden');
@@ -514,10 +521,10 @@ function detenerCamara(): void {
   if (status) { status.textContent = 'Cámara inactiva'; status.className = 'cam-status'; }
 }
 
-function capturarFrame(): string | null {
+function captureFrame(): string | null {
   const video  = getElOrNull('cam-video') as HTMLVideoElement | null;
   const canvas = getElOrNull('cam-canvas') as HTMLCanvasElement | null;
-  if (!streamActivo || !video || !canvas) return null;
+  if (!activeStream || !video || !canvas) return null;
   const MAX = 480, w = video.videoWidth || 640, h = video.videoHeight || 480;
   const ratio = Math.min(MAX / w, MAX / h, 1);
   canvas.width = Math.round(w * ratio); canvas.height = Math.round(h * ratio);
@@ -528,129 +535,129 @@ function capturarFrame(): string | null {
 // ----------------------------------------------------------------
 // FETCH — CARGAR EVENTOS (paginado)
 // ----------------------------------------------------------------
-class ErrorHttp extends Error {
+class HttpError extends Error {
   constructor(public readonly status: number) { super(`HTTP ${status}`); }
 }
 
-interface OpcionesCarga { silencioso?: boolean; forzar?: boolean }
+interface LoadOptions { silent?: boolean; force?: boolean }
 
 /** Huella de la página para detectar si hubo cambios reales desde el último poll. */
-function firmarPagina(p: PaginaResponse): string {
-  return `${p.paginaActual}|${p.totalPaginas}|${p.totalElementos}|` +
-    p.contenido.map(e => `${e.id}:${e.modo}:${e.distanciaCm}:${e.etiquetasIA ?? ''}:${e.fechaHora ?? ''}`).join(';');
+function signPage(p: PageResponse): string {
+  return `${p.currentPage}|${p.totalPages}|${p.totalElements}|` +
+    p.content.map(e => `${e.id}:${e.mode}:${e.distanceCm}:${e.aiLabels ?? ''}:${e.createdAt ?? ''}`).join(';');
 }
 
-async function cargarEventos(opts: OpcionesCarga = {}): Promise<void> {
-  if (cargaEnCurso) return;           // nunca dos cargas simultáneas
-  cargaEnCurso = true;
-  if (!opts.silencioso) mostrarCargando(true);
+async function loadEvents(opts: LoadOptions = {}): Promise<void> {
+  if (loadInProgress) return;           // nunca dos cargas simultáneas
+  loadInProgress = true;
+  if (!opts.silent) showLoading(true);
   try {
-    const res = await apiFetch(`${EP_EVENTOS}?page=${paginaActual}&size=${PAGE_SIZE}`);
+    const res = await apiFetch(`${EP_EVENTS}?page=${currentPage}&size=${PAGE_SIZE}`);
 
     if (res.status === 401) {
       // Sesión expirada
-      usuarioActual = null;
-      mostrarPantallaAuth();
+      currentUser = null;
+      showAuthScreen();
       return;
     }
-    if (!res.ok) throw new ErrorHttp(res.status);
+    if (!res.ok) throw new HttpError(res.status);
 
-    const pagina = await res.json() as PaginaResponse;
-    ocultarError();
-    refrescarEstado();
+    const page = await res.json() as PageResponse;
+    hideError();
+    refreshStatus();
 
     // Sin cambios -> no reconstruir tabla ni gráfica (evita parpadeo y trabajo inútil)
-    const firma = firmarPagina(pagina);
-    if (!opts.forzar && firma === ultimaFirma) return;
-    ultimaFirma = firma;
+    const signature = signPage(page);
+    if (!opts.force && signature === lastSignature) return;
+    lastSignature = signature;
 
-    todosEventos   = pagina.contenido;
-    totalPaginas   = pagina.totalPaginas;
-    totalEventos   = pagina.totalElementos;
-    paginaActual   = pagina.paginaActual;
+    allEvents   = page.content;
+    totalPages   = page.totalPages;
+    totalEvents   = page.totalElements;
+    currentPage   = page.currentPage;
 
-    actualizarKPIs();
-    renderTabla();
-    renderChart(todosEventos);
-    actualizarControlPaginacion(pagina);
+    updateKPIs();
+    renderTable();
+    renderChart(allEvents);
+    updatePaginationControl(page);
 
   } catch (e) {
-    if (e instanceof ErrorHttp) {
-      mostrarError(`El servidor no pudo entregar los eventos (error ${e.status}). Se reintentará automáticamente.`);
-      refrescarEstado('error del servidor');
+    if (e instanceof HttpError) {
+      showError(`El servidor no pudo entregar los eventos (error ${e.status}). Se reintentará automáticamente.`);
+      refreshStatus('error del servidor');
     } else {
-      mostrarError('Sin conexión con el servidor. Se reintentará automáticamente.');
-      refrescarEstado('sin conexión con el servidor');
+      showError('Sin conexión con el servidor. Se reintentará automáticamente.');
+      refreshStatus('sin conexión con el servidor');
     }
   } finally {
-    cargaEnCurso = false;
-    mostrarCargando(false);
+    loadInProgress = false;
+    showLoading(false);
   }
 }
 
 // ----------------------------------------------------------------
 // POLLING pausable
 // ----------------------------------------------------------------
-function iniciarPolling(): void {
-  detenerPolling();
-  if (pollPausado) return;
+function startPolling(): void {
+  stopPolling();
+  if (pollPaused) return;
   pollTimer = window.setInterval(() => {
     if (document.hidden) return;      // pestaña oculta: no consultar
-    void cargarEventos({ silencioso: true });
+    void loadEvents({ silent: true });
   }, REFRESH_MS);
-  iniciarPollingCapturas();
+  startCapturesPolling();
 }
 
-function detenerPolling(): void {
+function stopPolling(): void {
   if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
-  detenerPollingCapturas();
+  stopCapturesPolling();
 }
 
 function togglePolling(): void {
-  pollPausado = !pollPausado;
+  pollPaused = !pollPaused;
   const btn = getEl('btn-poll-toggle');
-  btn.setAttribute('aria-pressed', String(pollPausado));
-  btn.textContent = pollPausado
+  btn.setAttribute('aria-pressed', String(pollPaused));
+  btn.textContent = pollPaused
     ? 'Reanudar actualización automática'
     : 'Pausar actualización automática';
-  if (pollPausado) {
-    detenerPolling();
+  if (pollPaused) {
+    stopPolling();
   } else {
-    iniciarPolling();
-    void cargarEventos({ silencioso: true });
-    void cargarCapturas(true);
+    startPolling();
+    void loadEvents({ silent: true });
+    void loadCaptures(true);
   }
-  refrescarEstado();
+  refreshStatus();
 }
 
 /** Actualiza el estado anunciado (aria-live polite) solo si el texto cambió. */
-function refrescarEstado(extra = ''): void {
-  const el = getElOrNull('estado-sistema');
+function refreshStatus(extra = ''): void {
+  const el = getElOrNull('system-status');
   if (!el) return;
-  const base = `Sistema operativo · Actualización automática ${pollPausado ? 'en pausa' : `activa (eventos cada ${REFRESH_MS / 1000} s, capturas cada ${CAP_REFRESH_MS / 1000} s)`}`;
-  const texto = extra ? `${base} · ${extra}` : base;
-  if (el.textContent !== texto) el.textContent = texto;
+  const base = `Sistema operativo · Actualización automática ${pollPaused ? 'en pausa' : `activa (eventos cada ${REFRESH_MS / 1000} s, capturas cada ${CAP_REFRESH_MS / 1000} s)`}`;
+  const text = extra ? `${base} · ${extra}` : base;
+  if (el.textContent !== text) el.textContent = text;
 }
 
-function actualizarControlPaginacion(p: PaginaResponse): void {
+function updatePaginationControl(p: PageResponse): void {
   const info = getElOrNull('pag-info');
-  if (info) info.textContent = `Página ${p.paginaActual + 1} de ${Math.max(p.totalPaginas, 1)} · ${p.totalElementos} eventos`;
+  if (info) info.textContent = `Página ${p.currentPage + 1} de ${Math.max(p.totalPages, 1)} · ${p.totalElements} eventos`;
 
   const btnPrev = getElOrNull('btn-pag-prev') as HTMLButtonElement | null;
   const btnNext = getElOrNull('btn-pag-next') as HTMLButtonElement | null;
-  if (btnPrev) btnPrev.disabled = p.primera;
-  if (btnNext) btnNext.disabled = p.ultima;
+  if (btnPrev) btnPrev.disabled = p.first;
+  if (btnNext) btnNext.disabled = p.last;
 }
 
 // ----------------------------------------------------------------
 // KPIs
 // ----------------------------------------------------------------
-function actualizarKPIs(): void {
+function updateKPIs(): void {
   const countTotal  = getElOrNull('count-total');
-  const countActivo = getElOrNull('count-activo');
-  // Mostramos el total general (totalEventos) en el KPI, no solo el de la página
-  if (countTotal)  countTotal.textContent  = String(totalEventos);
-  if (countActivo) countActivo.textContent = String(todosEventos.filter(e => e.modo?.toUpperCase() === 'ACTIVO').length);
+  const countActive = getElOrNull('count-active');
+  // Mostramos el total general (totalEvents) en el KPI, no solo el de la página
+  if (countTotal)  countTotal.textContent  = String(totalEvents);
+  if (countActive) countActive.textContent = String(allEvents.filter(e => e.mode?.toUpperCase() === 'ACTIVE').length);
 }
 
 // ----------------------------------------------------------------
@@ -664,34 +671,34 @@ function tdText(text: string, className?: string): HTMLTableCellElement {
 }
 
 /** Marca de tiempo del evento; 0 si falta o es inválida (evita NaN en el orden). */
-function tiempoEvento(e: EventoResponse): number {
-  const t = e.fechaHora ? new Date(e.fechaHora).getTime() : 0;
+function eventTime(e: EventResponse): number {
+  const t = e.createdAt ? new Date(e.createdAt).getTime() : 0;
   return Number.isNaN(t) ? 0 : t;
 }
 
-function renderTabla(): void {
-  const filtroModo   = getEl('filtro-modo')   as HTMLSelectElement;
-  const filtroBuscar = getEl('filtro-buscar') as HTMLInputElement;
-  const tbody        = getEl('eventos-tbody');
+function renderTable(): void {
+  const modeFilter   = getEl('filter-mode')   as HTMLSelectElement;
+  const searchFilter = getEl('filter-search') as HTMLInputElement;
+  const tbody        = getEl('events-tbody');
   const emptyState   = getEl('empty-state');
   const tableCount   = getEl('table-count');
 
-  const modo   = filtroModo.value.toUpperCase();
-  const buscar = filtroBuscar.value.toLowerCase();
+  const mode   = modeFilter.value.toUpperCase();
+  const search = searchFilter.value.toLowerCase();
 
-  const filtrados = todosEventos
+  const filtered = allEvents
     .filter(e =>
-      (!modo   || e.modo?.toUpperCase() === modo) &&
-      (!buscar || (e.etiquetasIA ?? '').toLowerCase().includes(buscar))
+      (!mode   || e.mode?.toUpperCase() === mode) &&
+      (!search || (e.aiLabels ?? '').toLowerCase().includes(search))
     )
-    .sort((a, b) => tiempoEvento(b) - tiempoEvento(a));
+    .sort((a, b) => eventTime(b) - eventTime(a));
 
   while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
-  if (filtrados.length === 0) {
+  if (filtered.length === 0) {
     const msg = getElOrNull('empty-msg');
     if (msg) {
-      msg.textContent = todosEventos.length > 0
+      msg.textContent = allEvents.length > 0
         ? 'Ningún evento de esta página coincide con los filtros.'
         : 'Sin eventos. Usa el simulador o conecta el hardware.';
     }
@@ -700,20 +707,20 @@ function renderTabla(): void {
     return;
   }
   emptyState.classList.add('hidden');
-  tableCount.textContent = `${filtrados.length} evento${filtrados.length !== 1 ? 's' : ''} en esta página`;
+  tableCount.textContent = `${filtered.length} evento${filtered.length !== 1 ? 's' : ''} en esta página`;
 
-  filtrados.forEach(e => {
+  filtered.forEach(e => {
     const tr = document.createElement('tr');
 
     tr.appendChild(tdText(`#${e.id ?? '--'}`, 'td-id'));
 
-    const tdModo = document.createElement('td');
+    const tdMode = document.createElement('td');
     const badge  = document.createElement('span');
-    badge.className = 'badge-modo';
-    badge.setAttribute('data-modo', (e.modo ?? '').toUpperCase());
-    badge.textContent = e.modo ?? '--';
-    tdModo.appendChild(badge);
-    tr.appendChild(tdModo);
+    badge.className = 'badge-mode';
+    badge.setAttribute('data-mode', (e.mode ?? '').toUpperCase());
+    badge.textContent = modeLabel(e.mode);
+    tdMode.appendChild(badge);
+    tr.appendChild(tdMode);
 
     // Distancia + nivel con icono y texto explícito (no depende solo del color)
     const tdDist = document.createElement('td');
@@ -721,27 +728,27 @@ function renderTabla(): void {
     tdDist.textContent = '--'; // sin sensor de distancia en modo activo
     tr.appendChild(tdDist);
     // Mismo criterio que el mensaje de confirmación: SIN_IMAGEN no se muestra
-    const etiquetasVisibles = e.etiquetasIA && e.etiquetasIA !== 'SIN_IMAGEN'
-      ? e.etiquetasIA : '--';
-    tr.appendChild(tdText(etiquetasVisibles, 'td-ia'));
-    tr.appendChild(tdText(formatFecha(e.fechaHora), 'td-fecha'));
+    const visibleLabels = e.aiLabels && e.aiLabels !== 'NO_IMAGE'
+      ? e.aiLabels : '--';
+    tr.appendChild(tdText(visibleLabels, 'td-ia'));
+    tr.appendChild(tdText(formatDate(e.createdAt), 'td-date'));
 
-    const tdVoz = document.createElement('td');
-    const tieneIA = e.modo?.toUpperCase() === 'ACTIVO' &&
-                    e.etiquetasIA && e.etiquetasIA !== 'SIN_IMAGEN' &&
-                    !e.etiquetasIA.startsWith('ERROR');
+    const tdVoice = document.createElement('td');
+    const hasAI = e.mode?.toUpperCase() === 'ACTIVE' &&
+                    e.aiLabels && e.aiLabels !== 'NO_IMAGE' &&
+                    !e.aiLabels.startsWith('ERROR');
     // Sin síntesis de voz en el navegador no se ofrece un botón que solo mostraría un alert
-    if (tieneIA && e.etiquetasIA && synth) {
+    if (hasAI && e.aiLabels && synth) {
       const btn = document.createElement('button');
-      btn.className = 'btn-voz'; btn.textContent = 'Leer';
+      btn.className = 'btn-voice'; btn.textContent = 'Leer';
       btn.setAttribute('aria-label', 'Leer etiquetas en voz alta');
-      const textoVoz = e.etiquetasIA;
-      btn.addEventListener('click', () => leerVoz(textoVoz, btn));
-      tdVoz.appendChild(btn);
+      const voiceText = e.aiLabels;
+      btn.addEventListener('click', () => readAloud(voiceText, btn));
+      tdVoice.appendChild(btn);
     } else {
-      tdVoz.textContent = '--';
+      tdVoice.textContent = '--';
     }
-    tr.appendChild(tdVoz);
+    tr.appendChild(tdVoice);
     tbody.appendChild(tr);
   });
 }
@@ -749,24 +756,24 @@ function renderTabla(): void {
 // ----------------------------------------------------------------
 // GRÁFICA
 // ----------------------------------------------------------------
-function renderChart(eventos: EventoResponse[]): void {
-  const grupos: Record<string, number> = {};
-  [...eventos]
-    .sort((a, b) => tiempoEvento(a) - tiempoEvento(b))
+function renderChart(events: EventResponse[]): void {
+  const groups: Record<string, number> = {};
+  [...events]
+    .sort((a, b) => eventTime(a) - eventTime(b))
     .slice(-20)
     .forEach(e => {
-      const dia = e.fechaHora
-        ? new Date(e.fechaHora).toLocaleDateString('es-CO', { month: 'short', day: 'numeric' })
+      const day = e.createdAt
+        ? new Date(e.createdAt).toLocaleDateString('es-CO', { month: 'short', day: 'numeric' })
         : '?';
-      if (e.modo?.toUpperCase() !== 'ACTIVO') return;
-      grupos[dia] = (grupos[dia] ?? 0) + 1;
+      if (e.mode?.toUpperCase() !== 'ACTIVE') return;
+      groups[day] = (groups[day] ?? 0) + 1;
     });
 
-  const labels  = Object.keys(grupos);
-  const activos = labels.map(l => grupos[l]);
+  const labels  = Object.keys(groups);
+  const actives = labels.map(l => groups[l]);
 
   if (chart) chart.destroy();
-  const canvas = getElOrNull('eventos-chart') as HTMLCanvasElement | null;
+  const canvas = getElOrNull('events-chart') as HTMLCanvasElement | null;
   if (!canvas) return;
   const ctx = canvas.getContext('2d')!;
   chart = new Chart(ctx, {
@@ -774,7 +781,7 @@ function renderChart(eventos: EventoResponse[]): void {
     data: {
       labels,
       datasets: [
-        { label: 'Activo', data: activos, backgroundColor: 'rgba(143,184,232,0.7)', borderColor: '#8FB8E8', borderWidth: 2, fill: chartType === 'line', tension: 0.4 }
+        { label: 'Activo', data: actives, backgroundColor: 'rgba(143,184,232,0.7)', borderColor: '#8FB8E8', borderWidth: 2, fill: chartType === 'line', tension: 0.4 }
       ]
     },
     options: {
@@ -791,19 +798,19 @@ function renderChart(eventos: EventoResponse[]): void {
   });
 }
 
-function cambiarChart(tipo: 'bar' | 'line'): void {
-  chartType = tipo;
-  getEl('btn-chart-bar').classList.toggle('active',  tipo === 'bar');
-  getEl('btn-chart-line').classList.toggle('active', tipo === 'line');
-  getEl('btn-chart-bar').setAttribute('aria-pressed', String(tipo === 'bar'));
-  getEl('btn-chart-line').setAttribute('aria-pressed', String(tipo === 'line'));
-  renderChart(todosEventos);
+function switchChart(kind: 'bar' | 'line'): void {
+  chartType = kind;
+  getEl('btn-chart-bar').classList.toggle('active',  kind === 'bar');
+  getEl('btn-chart-line').classList.toggle('active', kind === 'line');
+  getEl('btn-chart-bar').setAttribute('aria-pressed', String(kind === 'bar'));
+  getEl('btn-chart-line').setAttribute('aria-pressed', String(kind === 'line'));
+  renderChart(allEvents);
 }
 
 // ----------------------------------------------------------------
 // SIMULADOR
 // ----------------------------------------------------------------
-function imagenABase64(file: File): Promise<string> {
+function imageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload  = e => resolve(e.target!.result as string);
@@ -812,16 +819,16 @@ function imagenABase64(file: File): Promise<string> {
   });
 }
 
-async function enviarSimulacion(): Promise<void> {
-  const modo      = 'ACTIVO';
+async function sendSimulation(): Promise<void> {
+  const mode      = 'ACTIVE';
   // El bastón no tiene sensor de distancia; el backend exige el campo, así que se envía 0.
-  const distancia = 0;
-  const btn       = getEl('btn-sim-enviar') as HTMLButtonElement;
+  const distance = 0;
+  const btn       = getEl('btn-sim-send') as HTMLButtonElement;
   const simResult = getEl('sim-result');
 
   // Nunca dos envíos simultáneos
-  if (envioEnCurso) return;
-  envioEnCurso = true;
+  if (sendInProgress) return;
+  sendInProgress = true;
 
   btn.disabled = true; btn.textContent = 'Procesando…';
   simResult.className = 'sim-result';
@@ -829,33 +836,33 @@ async function enviarSimulacion(): Promise<void> {
   simResult.textContent = 'Procesando…';
 
   try {
-    let etiquetasIA: string | null = null;
+    let aiLabels: string | null = null;
 
-    if (modo === 'ACTIVO') {
+    if (mode === 'ACTIVE') {
       let dataUrl: string | null = null;
-      if (fuenteImagen === 'cam' && streamActivo) {
-        dataUrl = capturarFrame();
+      if (imageSource === 'cam' && activeStream) {
+        dataUrl = captureFrame();
         if (!dataUrl) throw new Error('No se pudo capturar la imagen de la cámara');
-      } else if (fuenteImagen === 'file') {
-        const fi = getElOrNull('sim-imagen') as HTMLInputElement | null;
-        if (fi?.files?.[0]) dataUrl = await imagenABase64(fi.files[0]);
+      } else if (imageSource === 'file') {
+        const fi = getElOrNull('sim-image') as HTMLInputElement | null;
+        if (fi?.files?.[0]) dataUrl = await imageToBase64(fi.files[0]);
       }
       if (dataUrl) {
         simResult.textContent = 'Analizando con IA (COCO-SSD)…';
         try {
-          const analisis = await analizarConIA(dataUrl);
-          const aviso = mensajeSinEvento(analisis);
-          if (aviso !== null) {
+          const analysis = await analyzeWithAI(dataUrl);
+          const notice = noEventMessage(analysis);
+          if (notice !== null) {
             // Sin detección válida, duplicado u omitido: no se envía evento vacío al backend
-            simResult.textContent = aviso;
+            simResult.textContent = notice;
             simResult.classList.add('info');
             return;
           }
-          if (analisis.estado === 'ok') etiquetasIA = analisis.etiquetasFormateadas || null;
-        } catch (iaErr) {
+          if (analysis.status === 'ok') aiLabels = analysis.formattedLabels || null;
+        } catch (aiErr) {
           // Error de análisis: no se envía evento al backend; se informa al usuario
-          const msgErr = (iaErr as Error).message;
-          simResult.textContent = msgErr === MENSAJE_ERROR_MODELO
+          const msgErr = (aiErr as Error).message;
+          simResult.textContent = msgErr === MODEL_ERROR_MESSAGE
             ? msgErr
             : 'Error de análisis: ' + msgErr;
           simResult.classList.add('error');
@@ -865,8 +872,8 @@ async function enviarSimulacion(): Promise<void> {
     }
 
 
-    const body: EventoRequest = { modo, distanciaCm: distancia, etiquetasIA };
-    const res = await apiFetch(EP_EVENTOS, {
+    const body: EventRequest = { mode, distanceCm: distance, aiLabels };
+    const res = await apiFetch(EP_EVENTS, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -875,27 +882,27 @@ async function enviarSimulacion(): Promise<void> {
     if (res.status === 401) { await logout(); return; }
     if (!res.ok) throw new Error(`el servidor rechazó el evento (error ${res.status})`);
 
-    const data = await res.json() as EventoResponse;
+    const data = await res.json() as EventResponse;
     simResult.classList.add('success');
-    const ia = data.etiquetasIA && data.etiquetasIA !== 'SIN_IMAGEN'
-      ? ' | IA: ' + data.etiquetasIA : '';
-    simResult.textContent = `Evento #${data.id} · ${modo}${ia}`;
+    const ai = data.aiLabels && data.aiLabels !== 'NO_IMAGE'
+      ? ' | IA: ' + data.aiLabels : '';
+    simResult.textContent = `Evento #${data.id} · ${modeLabel(mode)}${ai}`;
 
     // Refrescar solo la primera página para ver el nuevo evento
-    paginaActual = 0;
-    await cargarEventos();
+    currentPage = 0;
+    await loadEvents();
 
   } catch (e) {
     simResult.classList.add('error');
     simResult.textContent = 'No se pudo enviar el evento: ' + (e as Error).message;
   } finally {
-    envioEnCurso = false;
+    sendInProgress = false;
     btn.disabled = false; btn.textContent = 'Enviar evento';
   }
 }
 
 /** Detiene el envío automático y restaura el botón. Seguro de llamar aunque no esté activo. */
-function detenerAuto(): void {
+function stopAuto(): void {
   if (autoInterval !== null) { clearInterval(autoInterval); autoInterval = null; }
   if (!autoRunning) return;
   autoRunning = false;
@@ -906,21 +913,21 @@ function detenerAuto(): void {
 function toggleAuto(): void {
   const btn = getEl('btn-sim-auto');
   if (autoRunning) {
-    detenerAuto();
+    stopAuto();
   } else {
     autoRunning = true; btn.textContent = 'Detener auto'; btn.classList.add('btn-danger');
-    void enviarSimulacion();
-    autoInterval = window.setInterval(() => { void enviarSimulacion(); }, 5000);
+    void sendSimulation();
+    autoInterval = window.setInterval(() => { void sendSimulation(); }, 5000);
   }
 }
 
 // ----------------------------------------------------------------
 // VOZ
 // ----------------------------------------------------------------
-function leerVoz(texto: string, btn: HTMLButtonElement): void {
+function readAloud(text: string, btn: HTMLButtonElement): void {
   if (!synth) { alert('Tu navegador no soporta voz.'); return; }
   if (synth.speaking) { synth.cancel(); return; }
-  const u = new SpeechSynthesisUtterance(`Obstáculo identificado: ${texto}`);
+  const u = new SpeechSynthesisUtterance(`Obstáculo identificado: ${text}`);
   u.lang = 'es-ES'; u.rate = 0.9;
   u.onstart = (): void => { btn.textContent = 'Parar'; };
   u.onend   = (): void => { btn.textContent = 'Leer'; };
@@ -931,21 +938,21 @@ function leerVoz(texto: string, btn: HTMLButtonElement): void {
 // ----------------------------------------------------------------
 // UI HELPERS
 // ----------------------------------------------------------------
-function mostrarCargando(visible: boolean): void {
+function showLoading(visible: boolean): void {
   const loading = getElOrNull('loading');
   if (loading) {
     loading.classList.toggle('hidden', !visible);
     loading.setAttribute('aria-busy', visible ? 'true' : 'false');
   }
 }
-function mostrarError(msg: string): void {
+function showError(msg: string): void {
   const errorBanner = getElOrNull('error-banner');
   if (errorBanner) { errorBanner.textContent = msg; errorBanner.classList.remove('hidden'); }
 }
-function ocultarError(): void {
+function hideError(): void {
   getElOrNull('error-banner')?.classList.add('hidden');
 }
-function formatFecha(iso?: string): string {
+function formatDate(iso?: string): string {
   if (!iso) return '--';
   try {
     return new Intl.DateTimeFormat('es-CO', {
