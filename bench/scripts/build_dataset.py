@@ -34,29 +34,29 @@ used = set(); chosen = {}
 def pick(name, cand, n):
     cand = [i for i in cand if i not in used]
     s = sorted(random.sample(cand, n)); used.update(s); chosen[name] = s
-pick('grandes', [i for i in person_ids if any(area_frac(b, imgs[i]) > 0.15 for b in per[i])], 12)
-pick('pequenas', [i for i in person_ids if all(area_frac(b, imgs[i]) < 0.01 for b in per[i])], 12)
-pick('dificiles', [i for i in person_ids if any(b[3]/max(b[2], 1e-6) < 1.2 and area_frac(b, imgs[i]) >= 0.02 for b in per[i])], 8)
-pick('ocluidas', [i for i in person_ids if any((touches_edge(b, imgs[i]) or overlapped(k, per[i])) and area_frac(b, imgs[i]) >= 0.02 for k, b in enumerate(per[i]))], 8)
-pick('multiples', [i for i in person_ids if len(per[i]) >= 3], 10)
+pick('large', [i for i in person_ids if any(area_frac(b, imgs[i]) > 0.15 for b in per[i])], 12)
+pick('small', [i for i in person_ids if all(area_frac(b, imgs[i]) < 0.01 for b in per[i])], 12)
+pick('hard', [i for i in person_ids if any(b[3]/max(b[2], 1e-6) < 1.2 and area_frac(b, imgs[i]) >= 0.02 for b in per[i])], 8)
+pick('occluded', [i for i in person_ids if any((touches_edge(b, imgs[i]) or overlapped(k, per[i])) and area_frac(b, imgs[i]) >= 0.02 for k, b in enumerate(per[i]))], 8)
+pick('multiple', [i for i in person_ids if len(per[i]) >= 3], 10)
 conf = [i for i in noperson if objs.get(i, set()) & conf_set]
 used_before = set(used)
 cs = sorted(random.sample(conf, 5)); used.update(cs)
 rest = [i for i in noperson if i not in used and not (objs.get(i, set()) & conf_set)]
 ps = sorted(random.sample(rest, 5)); used.update(ps)
-groups = {i: 'confundibles' for i in cs}; groups.update({i: 'sin_persona_simple' for i in ps})
-chosen['sin_persona'] = sorted(cs + ps)
+groups = {i: 'confusable' for i in cs}; groups.update({i: 'no_person_simple' for i in ps})
+chosen['no_person'] = sorted(cs + ps)
 os.makedirs(img_dir, exist_ok=True)
-res = {'seed': 42, 'fuente': 'COCO val2017 (CC BY 4.0)', 'imagenes': []}
+res = {'seed': 42, 'source': 'COCO val2017 (CC BY 4.0)', 'images': []}
 for st, lst in chosen.items():
     for i in lst:
         im = imgs[i]
-        e = {'id': i, 'file_name': im['file_name'], 'width': im['width'], 'height': im['height'], 'estrato': st,
-             'personas_bbox_xywh': per.get(i, []), 'tiene_persona_crowd_ignorada': bool(crowd.get(i))}
-        if st == 'sin_persona':
-            e['grupo'] = groups[i]; e['objetos_coco'] = sorted(objs.get(i, set()))
-        res['imagenes'].append(e)
+        e = {'id': i, 'file_name': im['file_name'], 'width': im['width'], 'height': im['height'], 'stratum': st,
+             'person_bboxes_xywh': per.get(i, []), 'has_ignored_crowd_person': bool(crowd.get(i))}
+        if st == 'no_person':
+            e['group'] = groups[i]; e['coco_objects'] = sorted(objs.get(i, set()))
+        res['images'].append(e)
         p = os.path.join(img_dir, im['file_name'])
         if not os.path.exists(p): urllib.request.urlretrieve('http://images.cocodataset.org/val2017/' + im['file_name'], p)
 json.dump(res, open(out, 'w'), separators=(',', ':'))
-print({k: len(v) for k, v in chosen.items()}, len(res['imagenes']))
+print({k: len(v) for k, v in chosen.items()}, len(res['images']))
