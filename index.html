@@ -21,10 +21,10 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <a class="skip-link" href="#contenido-principal">Saltar al contenido</a>
+  <a class="skip-link" href="#main-content">Saltar al contenido</a>
 
   <!-- PANTALLA DE AUTENTICACIÓN: se muestra si no hay sesión activa. -->
-  <div id="pantalla-auth" class="auth-screen" role="main" aria-label="Autenticación">
+  <div id="auth-screen" class="auth-screen" role="main" aria-label="Autenticación">
     <div class="auth-card">
       <div class="auth-logo">
         <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -39,17 +39,17 @@
         <button id="tab-login" class="auth-tab active" role="tab" aria-selected="true" aria-controls="form-login">
           Iniciar sesión
         </button>
-        <button id="tab-registro" class="auth-tab" role="tab" aria-selected="false" aria-controls="form-registro">
+        <button id="tab-register" class="auth-tab" role="tab" aria-selected="false" aria-controls="form-register">
           Crear cuenta
         </button>
       </div>
 
-      <div id="auth-mensaje" class="auth-msg" role="alert" aria-live="polite"></div>
+      <div id="auth-message" class="auth-msg" role="alert" aria-live="polite"></div>
 
       <form id="form-login" role="tabpanel" class="auth-form" aria-labelledby="tab-login" novalidate>
         <div class="form-group">
-          <label for="login-correo">Correo electrónico</label>
-          <input id="login-correo" type="email" class="form-input" placeholder="correo@ejemplo.com"
+          <label for="login-email">Correo electrónico</label>
+          <input id="login-email" type="email" class="form-input" placeholder="correo@ejemplo.com"
                  autocomplete="email" required maxlength="120" />
         </div>
         <div class="form-group">
@@ -62,15 +62,15 @@
         </button>
       </form>
 
-      <form id="form-registro" role="tabpanel" class="auth-form hidden" aria-labelledby="tab-registro" novalidate>
+      <form id="form-register" role="tabpanel" class="auth-form hidden" aria-labelledby="tab-register" novalidate>
         <div class="form-group">
-          <label for="reg-nombre">Nombre completo</label>
-          <input id="reg-nombre" type="text" class="form-input" placeholder="Tu nombre"
+          <label for="reg-name">Nombre completo</label>
+          <input id="reg-name" type="text" class="form-input" placeholder="Tu nombre"
                  autocomplete="name" required minlength="2" maxlength="60" />
         </div>
         <div class="form-group">
-          <label for="reg-correo">Correo electrónico</label>
-          <input id="reg-correo" type="email" class="form-input" placeholder="correo@ejemplo.com"
+          <label for="reg-email">Correo electrónico</label>
+          <input id="reg-email" type="email" class="form-input" placeholder="correo@ejemplo.com"
                  autocomplete="email" required maxlength="120" />
         </div>
         <div class="form-group">
@@ -78,7 +78,7 @@
           <input id="reg-pass" type="password" class="form-input" placeholder="Mínimo 8 caracteres"
                  autocomplete="new-password" required minlength="8" maxlength="72" />
         </div>
-        <button id="btn-registro" type="submit" class="btn-primary btn-full">
+        <button id="btn-register" type="submit" class="btn-primary btn-full">
           Crear cuenta
         </button>
       </form>
@@ -86,7 +86,7 @@
   </div>
 
   <!-- PANTALLA DASHBOARD (requiere sesión) -->
-  <div id="pantalla-dashboard" class="hidden">
+  <div id="dashboard-screen" class="hidden">
 
     <header class="header" role="banner">
       <div class="header-inner">
@@ -98,7 +98,7 @@
           <span class="logo-text"><strong>ORBIS</strong><span class="logo-sub">Monitor IoT</span></span>
         </div>
         <div class="header-actions">
-          <span id="usuario-correo" class="usuario-correo"></span>
+          <span id="user-email" class="user-email"></span>
           <button id="btn-refresh" class="btn-icon" type="button" aria-label="Actualizar datos" title="Actualizar datos">
             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
               <path d="M20 12a8 8 0 1 1-2.34-5.66" />
@@ -110,15 +110,15 @@
       </div>
     </header>
 
-    <main class="main" id="contenido-principal" tabindex="-1">
+    <main class="main" id="main-content" tabindex="-1">
 
-      <div class="estado-sistema">
-        <span id="estado-sistema" role="status" aria-live="polite">Sistema iniciando…</span>
+      <div class="system-status">
+        <span id="system-status" role="status" aria-live="polite">Sistema iniciando…</span>
         <button id="btn-poll-toggle" class="btn-poll" type="button" aria-pressed="false">Pausar actualización automática</button>
       </div>
 
       <!-- Alerta de peligro (anunciada de inmediato) -->
-      <div id="alerta-peligro" class="alerta-peligro" role="alert" aria-live="assertive" aria-atomic="true"></div>
+      <div id="danger-alert" class="danger-alert" role="alert" aria-live="assertive" aria-atomic="true"></div>
 
       <section class="kpi-grid" aria-label="Indicadores clave">
         <div class="kpi-card">
@@ -127,7 +127,7 @@
         </div>
         <div class="kpi-card">
           <span class="kpi-label">Modo activo</span>
-          <span class="kpi-number" id="count-activo">-</span>
+          <span class="kpi-number" id="count-active">-</span>
         </div>
       </section>
 
@@ -142,7 +142,7 @@
             </div>
           </div>
           <div class="chart-container">
-            <canvas id="eventos-chart" role="img" aria-label="Gráfica de eventos por modo y fecha"></canvas>
+            <canvas id="events-chart" role="img" aria-label="Gráfica de eventos por modo y fecha"></canvas>
           </div>
         </section>
 
@@ -157,7 +157,7 @@
             <p class="sim-desc">Modo activo: el bastón toma una foto con la cámara y la IA describe lo que ve.</p>
 
             <!-- CÁMARA / IMAGEN -->
-            <div id="grupo-camara">
+            <div id="camera-group">
               <div id="ia-status" class="ia-status">Cargando modelo IA…</div>
               <div class="img-source-tabs" role="group" aria-label="Fuente de imagen">
                 <button class="src-btn active" id="btn-src-cam" type="button" aria-pressed="true">Cámara en vivo</button>
@@ -176,13 +176,13 @@
                 <div id="cam-status" class="cam-status">Cámara inactiva</div>
               </div>
               <div id="panel-file" class="hidden">
-                <input type="file" id="sim-imagen" accept="image/*" class="form-file" aria-label="Seleccionar imagen" />
+                <input type="file" id="sim-image" accept="image/*" class="form-file" aria-label="Seleccionar imagen" />
                 <img id="sim-preview" class="sim-preview hidden" alt="Vista previa de la imagen seleccionada" />
               </div>
             </div>
 
             <div class="sim-actions">
-              <button id="btn-sim-enviar" class="btn-primary" type="button">Enviar evento</button>
+              <button id="btn-sim-send" class="btn-primary" type="button">Enviar evento</button>
               <button id="btn-sim-auto" class="btn-secondary" type="button">Auto (5s)</button>
             </div>
             <div id="sim-result" class="sim-result hidden" role="status" aria-live="polite"></div>
@@ -191,15 +191,15 @@
 
       </div>
 
-      <section class="card table-card" aria-labelledby="h2-tabla">
+      <section class="card table-card" aria-labelledby="h2-table">
         <div class="card-header">
-          <h2 id="h2-tabla">Historial de eventos</h2>
+          <h2 id="h2-table">Historial de eventos</h2>
           <div class="table-filters">
-            <select id="filtro-modo" class="form-select sm" aria-label="Filtrar por modo">
+            <select id="filter-mode" class="form-select sm" aria-label="Filtrar por modo">
               <option value="">Todos los modos</option>
-              <option value="ACTIVO">Activo</option>
+              <option value="ACTIVE">Activo</option>
             </select>
-            <input type="search" id="filtro-buscar" class="form-input sm"
+            <input type="search" id="filter-search" class="form-input sm"
                    placeholder="Buscar etiqueta IA" aria-label="Buscar por etiqueta IA" />
           </div>
         </div>
@@ -208,7 +208,7 @@
           <div class="spinner" aria-hidden="true"></div><span>Cargando eventos…</span>
         </div>
         <div class="table-wrapper">
-          <table class="eventos-table" aria-label="Historial de eventos del bastón">
+          <table class="events-table" aria-label="Historial de eventos del bastón">
             <thead><tr>
               <th scope="col">ID</th>
               <th scope="col">Modo</th>
@@ -217,14 +217,14 @@
               <th scope="col">Fecha y hora</th>
               <th scope="col">Voz</th>
             </tr></thead>
-            <tbody id="eventos-tbody"></tbody>
+            <tbody id="events-tbody"></tbody>
           </table>
         </div>
         <div id="empty-state" class="empty-state hidden" role="status">
           <p id="empty-msg">Sin eventos. Usa el simulador o conecta el hardware.</p>
         </div>
 
-        <nav class="paginacion" aria-label="Paginación de eventos">
+        <nav class="pagination" aria-label="Paginación de eventos">
           <button id="btn-pag-prev" class="btn-pag" type="button" disabled>Anterior</button>
           <span id="pag-info" class="pag-info" aria-live="polite"></span>
           <button id="btn-pag-next" class="btn-pag" type="button" disabled>Siguiente</button>
@@ -236,26 +236,26 @@
       </section>
 
 
-      <section class="card capturas-card" aria-labelledby="h2-capturas">
+      <section class="card captures-card" aria-labelledby="h2-captures">
         <div class="card-header">
-          <h2 id="h2-capturas">Capturas analizadas</h2>
-          <span id="cap-actualizado" class="cap-actualizado" role="status"></span>
+          <h2 id="h2-captures">Capturas analizadas</h2>
+          <span id="cap-updated" class="cap-updated" role="status"></span>
         </div>
-        <p class="cap-nota">Se muestra la descripción generada por la IA. Las imágenes no se conservan: el servidor las elimina tras el análisis.</p>
-        <div id="cap-contenido" aria-busy="true">
-          <div id="cap-cargando" class="loading">
+        <p class="cap-note">Se muestra la descripción generada por la IA. Las imágenes no se conservan: el servidor las elimina tras el análisis.</p>
+        <div id="cap-content" aria-busy="true">
+          <div id="cap-loading" class="loading">
             <div class="spinner" aria-hidden="true"></div><span>Cargando capturas…</span>
           </div>
           <div id="cap-error" class="error-banner hidden" role="alert">
             <span id="cap-error-msg"></span>
-            <button id="cap-reintentar" class="btn-pag cap-reintentar" type="button">Reintentar</button>
+            <button id="cap-retry" class="btn-pag cap-retry" type="button">Reintentar</button>
           </div>
-          <div id="cap-vacio" class="empty-state hidden" role="status">
+          <div id="cap-empty" class="empty-state hidden" role="status">
             <p>Aún no hay capturas analizadas. Aparecerán aquí cuando el bastón envíe una foto en modo activo.</p>
           </div>
-          <ul id="cap-lista" class="capturas-lista hidden" aria-label="Lista de capturas analizadas"></ul>
+          <ul id="cap-list" class="captures-list hidden" aria-label="Lista de capturas analizadas"></ul>
         </div>
-        <nav id="cap-nav" class="paginacion hidden" aria-label="Paginación de capturas">
+        <nav id="cap-nav" class="pagination hidden" aria-label="Paginación de capturas">
           <button id="cap-prev" class="btn-pag" type="button" disabled>Anterior</button>
           <span id="cap-pag-info" class="pag-info" aria-live="polite"></span>
           <button id="cap-next" class="btn-pag" type="button" disabled>Siguiente</button>
