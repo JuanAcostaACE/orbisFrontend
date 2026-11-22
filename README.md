@@ -129,7 +129,7 @@ El refresco automatico se pausa si la pestaña esta oculta. Con el proxy de Verc
 - Cabeceras de seguridad y CSP (modo Report-Only) configuradas en `vercel.json`.
 - Librerías de CDN con versión fija y SRI.
 - Sin `innerHTML` con datos del backend; sin tokens en `localStorage`.
-- CI con `npm audit`, Dependabot y CodeQL.
+- CI con `npm audit` y CodeQL.
 
 Detalles y cómo reportar vulnerabilidades: [SECURITY.md](SECURITY.md).
 

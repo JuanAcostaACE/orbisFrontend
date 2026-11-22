@@ -17,7 +17,7 @@ Respondemos en un plazo de 5 días hábiles.
 | Sesión | Cookie HttpOnly del backend; el frontend nunca guarda tokens en `localStorage` |
 | Red | `apiFetch` con timeout de 15 s y `cache: no-store` |
 | Formularios | Límites de longitud alineados con el backend (contraseña ≤ 72 bytes) |
-| Dependencias | `npm audit` en CI, Dependabot y CodeQL |
+| Dependencias | `npm audit` en CI y CodeQL |
 
 ## Pasar la CSP a modo estricto
 
