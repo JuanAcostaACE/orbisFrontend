@@ -96,8 +96,8 @@ orbisFrontend/
 ├── app.js              # Bundle minificado generado por npm run build (se versiona)
 ├── src/
 │   ├── app.ts          # Sesion, dashboard, camara, tabla, grafica y polling
-│   ├── vision.ts       # Proveedores de IA (COCO-SSD, MobileNet) y GestorVision
-│   └── capturas.ts     # Lista paginada de capturas analizadas
+│   ├── vision.ts       # Proveedores de IA (COCO-SSD, MobileNet) y VisionManager
+│   └── captures.ts     # Lista paginada de capturas analizadas
 ├── scripts/minify.cjs  # Une dist/*.js y minifica con Terser
 ├── test/               # Tests unitarios (node:test)
 ├── docs/               # Documentacion tecnica
@@ -114,11 +114,11 @@ Todas las llamadas pasan por `apiFetch` (`src/app.ts`), que envia la cookie de s
 
 | Metodo | Ruta | Uso |
 |---|---|---|
-| POST | `/auth/login`, `/auth/registro`, `/auth/logout` | Sesion |
+| POST | `/auth/login`, `/auth/register`, `/auth/logout` | Sesion |
 | GET | `/auth/me` | Comprobar si hay sesion al abrir la pagina |
-| GET | `/api/v1/eventos?page=&size=` | Eventos paginados (se refresca cada 15 s) |
-| POST | `/api/v1/eventos` | Evento enviado desde el simulador |
-| GET | `/api/v1/dispositivos/capturas?page=&size=` | Capturas analizadas (se refresca cada 10 s) |
+| GET | `/api/v1/events?page=&size=` | Eventos paginados (se refresca cada 15 s) |
+| POST | `/api/v1/events` | Evento enviado desde el simulador |
+| GET | `/api/v1/devices/captures?page=&size=` | Capturas analizadas (se refresca cada 10 s) |
 
 El refresco automatico se pausa si la pestaña esta oculta. Con el proxy de Vercel no hace falta CORS. En local, el backend solo acepta por defecto `http://localhost:5173` y `http://localhost:8080`; si sirves el panel en el puerto 3000, arranca el backend con `APP_CORS_ORIGIN=http://localhost:3000`.
 
